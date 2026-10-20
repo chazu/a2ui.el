@@ -295,6 +295,8 @@ when present, replaces its generated line."
                                  lines))
                          (gethash "components" schema))
                 (concat (format "A2UI v0.9 catalog %s\n" (a2ui-catalog-id catalog))
+                        (when-let* ((about (gethash "description" schema)))
+                          (concat about "\n"))
                         a2ui--digest-preamble "\n"
                         (string-join (nreverse lines) "\n") "\n"
                         "Functions: " (a2ui--digest-functions schema)))))))

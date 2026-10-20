@@ -96,7 +96,10 @@ Talk to an AG-UI agent:
 M-x a2ui-agui-send RET deploy the billing service RET
 ```
 
-`examples/agents/` has two test agents. `deploy_agent.py` is scripted and needs no API key. `llm_agent.py` is backed by OpenAI. Run either with `uv run`.
+`examples/agents/` has three test agents, each run with `uv run`:
+- `deploy_agent.py` is scripted and needs no API key.
+- `llm_agent.py` is backed by OpenAI.
+- `claude_agent.py` uses your Claude Code login through `claude -p`.
 
 ## Configuration
 

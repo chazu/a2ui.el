@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1",
   "title": "a2ui.el Emacs catalog",
-  "description": "The A2UI v0.9 basic catalog (less Tabs and Modal) plus components for Emacs: Section, Table, Diff, Code, Picker, FileRef and OrgText.",
+  "description": "The A2UI v0.9 basic catalog (less Tabs and Modal) plus Emacs components: Section, Table, Diff, Code, Picker, FileRef and OrgText.  Prefer them to building the same thing from Rows and Text.",
   "catalogId": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1",
   "components": {
     "Text": {
@@ -846,7 +846,7 @@
     "Section": {
       "type": "object",
       "description": "A collapsible section with a title, folded and unfolded with RET or TAB on its heading.",
-      "x-a2ui-digest": "Section: title:str child:id collapsed?:bool  (a fold; RET/TAB toggles; bind collapsed to keep it in data)",
+      "x-a2ui-digest": "Section: title:str child:id collapsed?:bool  (group or fold secondary detail; RET/TAB toggles)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
@@ -885,7 +885,7 @@
     "Table": {
       "type": "object",
       "description": "A table of rows from the data model, with optional row selection and a row action.",
-      "x-a2ui-digest": "Table: columns:[{label:str key:string align?:left|right|center}] rows:path|[objects] rowKey?:string selectable?:none|single|multiple selection?:path rowAction?:action  (key names a row field; selection gets the rowKey value(s), else row indices; RET on a row runs rowAction with paths in its context relative to that row)",
+      "x-a2ui-digest": "Table: columns:[{label:str key:string align?:left|right|center}] rows:path|[objects] rowKey?:string selectable?:none|single|multiple selection?:path rowAction?:action  (any list of records: files, items, results; key names a row field; selection gets rowKey values; rowAction runs on RET with paths relative to the row)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
@@ -963,7 +963,7 @@
     "Diff": {
       "type": "object",
       "description": "A unified diff, fontified like diff-mode, with optional Accept and Reject buttons.",
-      "x-a2ui-digest": "Diff: diff:str file?:str acceptAction?:action rejectAction?:action  (unified diff text, shown fontified)",
+      "x-a2ui-digest": "Diff: diff:str file?:str acceptAction?:action rejectAction?:action  (a proposed change to one file, as unified diff text)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
@@ -1003,7 +1003,7 @@
     "Code": {
       "type": "object",
       "description": "Source code fontified with the language's major mode.",
-      "x-a2ui-digest": "Code: text:str language?:string  (e.g. python, elisp, sh, json)",
+      "x-a2ui-digest": "Code: text:str language?:string  (source, commands or config, fontified; language e.g. python, elisp, sh, json, yaml)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
@@ -1035,7 +1035,7 @@
     "Picker": {
       "type": "object",
       "description": "One choice from a list, picked with completion; options may come from the data model.",
-      "x-a2ui-digest": "Picker: options:strs|[{label:str value:string}]|path value:str label?:str  (completing-read; writes the chosen value)",
+      "x-a2ui-digest": "Picker: options:strs|[{label:str value:string}]|path value:str label?:str  (choose one of many by completion; options may be bound to data)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
@@ -1076,7 +1076,7 @@
     "FileRef": {
       "type": "object",
       "description": "A link that visits a file, optionally at a line.  Relative paths start at the project.",
-      "x-a2ui-digest": "FileRef: path:str line?:num label?:str  (a link that opens the file at the line)",
+      "x-a2ui-digest": "FileRef: path:str line?:num label?:str  (a link the user follows to that file and line; paths relative to the project)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
@@ -1111,7 +1111,7 @@
     "OrgText": {
       "type": "object",
       "description": "Read-only text in Org markup, shown with Org's faces.",
-      "x-a2ui-digest": "OrgText: text:str  (Org markup: *bold* /italic/ =code= [[url][links]], headings, lists)",
+      "x-a2ui-digest": "OrgText: text:str  (longer prose in Org markup: *bold* /italic/ =code= [[url][links]], headings, lists)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
