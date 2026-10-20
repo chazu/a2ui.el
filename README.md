@@ -2,6 +2,8 @@
 
 Let AI agents draw native, interactive UI in Emacs: forms, tables, diffs and pickers, rendered in a buffer and bound to live data.
 
+**SLOP WARNING** As of the time of writing, this project is little more than slop. Nothing more than slop, honestly. Any and all feedback is welcome, as are PRs of reasonable size and scope. While I hope to work on this project enough to justify polishing it, at present the reader/user should not expect any hand-crafted code or even serious agentic refactoring. Just slop. Load-bearing slop.
+
 [![CI](https://github.com/chazu/a2ui.el/actions/workflows/test.yml/badge.svg)](https://github.com/chazu/a2ui.el/actions/workflows/test.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
@@ -24,7 +26,7 @@ Let AI agents draw native, interactive UI in Emacs: forms, tables, diffs and pic
 ## Requirements
 
 - Emacs 29.1 or later
-- [vui.el](https://github.com/d12frosted/vui.el) from MELPA. The older `1.4.0` on MELPA-stable is not enough.
+- [vui.el](https://github.com/d12frosted/vui.el) from MELPA. **NOTE** The older `1.4.0` on MELPA-stable is not enough. When I have tidied this project up enough to not be an embarassing slop-bucket, I will ask the maintainer for a new release. Until then, don't use melpa-stable.
 - `curl` 7.76 or later, for talking to AG-UI agents
 - For a given agent: [gptel](https://github.com/karthink/gptel), [agent-shell](https://github.com/xenodium/agent-shell), Claude Code or Codex, as below
 
