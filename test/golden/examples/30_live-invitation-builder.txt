@@ -3,7 +3,7 @@ Invitation Builder
 Customize your invitation
 Event Name: Summer Gala
 Guest of Honor: Alex Johnson
-Event Date & Time: [Tue Jul 15, 2025 15:00]
+Event Date & Time: [Tue Jul 15, 2025 19:00]
 Location: [Sunset Terrace]
 Live Preview
 ────────────────────────────────────────────────────────────

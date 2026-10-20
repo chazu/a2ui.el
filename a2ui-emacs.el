@@ -113,12 +113,15 @@ emphasis markers and link targets) is removed."
                          (when setup (funcall setup))
                          (font-lock-ensure)
                          (when strip-invisible
-                           (let ((pos (point-min)))
+                           ;; Only what the mode really hides (Org 9.6 marks link
+                           ;; descriptions with a visible `invisible' value), found
+                           ;; before deleting: Org's change hooks would unhide the rest.
+                           (let ((pos (point-min)) (hidden nil) (inhibit-modification-hooks t))
                              (while (< pos (point-max))
-                               (let ((next (next-single-property-change pos 'invisible nil (point-max))))
-                                 (if (get-text-property pos 'invisible)
-                                     (delete-region pos next)
-                                   (setq pos next))))))
+                               (let ((next (next-single-char-property-change pos 'invisible nil (point-max))))
+                                 (when (invisible-p pos) (push (cons pos next) hidden))
+                                 (setq pos next)))
+                             (pcase-dolist (`(,beg . ,end) hidden) (delete-region beg end))))
                          ;; Some modes use `font-lock-face'; vui only keeps `face'.
                          (let ((pos (point-min)))
                            (while (< pos (point-max))

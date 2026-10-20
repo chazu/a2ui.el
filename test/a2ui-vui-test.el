@@ -17,6 +17,10 @@
 (require 'org)
 (require 'a2ui)
 
+;; DateTimeInput shows instants in local time; snapshots are taken in UTC
+;; wherever the tests run.
+(set-time-zone-rule t)
+
 (defconst a2ui-vui-test--dir
   (file-name-directory (or load-file-name buffer-file-name)))
 
@@ -155,9 +159,17 @@ evaluates to the messages to replay, which create SURFACE-ID (default
 (defconst a2ui-vui-test--expected-errors '("37_native-grid")
   "Fixtures that are expected to report errors: they use custom components.")
 
+(defconst a2ui-vui-test--emoji-width-fixtures '("04_weather-current")
+  "Fixtures whose layout pads emoji presentation sequences such as ☀️.
+Their goldens measure those as one column, as released Emacs does;
+development Emacs measures two.")
+
 (defun a2ui-vui-test--snapshot (fixture golden)
   "Render FIXTURE and compare every surface it creates with GOLDEN.
 The golden file holds each surface's text and the a2ui faces in it."
+  (when (and (member (file-name-base fixture) a2ui-vui-test--emoji-width-fixtures)
+             (/= (string-width "☀️") 1))
+    (ert-skip "This Emacs measures emoji presentation sequences differently"))
   (let ((a2ui-vui-test--sent nil)
         (a2ui-vui-auto-show t)
         (a2ui-log-messages nil)

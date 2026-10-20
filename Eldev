@@ -17,3 +17,8 @@
 (eldev-add-extra-dependencies 'test 'gptel)
 
 (setf eldev-lint-default '(package))
+
+;; Emacs 30 turned on checkdoc's experimental voice check, which flags
+;; nouns and later clauses ("runs", "it extends"); Emacs 31 turned it off.
+(with-eval-after-load 'checkdoc
+  (setf checkdoc-verb-check-experimental-flag nil))
