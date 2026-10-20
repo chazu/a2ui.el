@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 (2026-10-20)
+
+- OrgText keeps link descriptions on Emacs 29: Org 9.6 marks them with an `invisible` value it doesn't hide, and they were stripped with the link targets.
+- Tests no longer depend on the local time zone, and the CI matrix (Emacs 29.1, 29.4, 30.1, snapshot, checkdoc on 30.1) passes. Emacs 32 lays out emoji such as ☀️ two columns wide, so one snapshot has an Emacs 32 golden.
+
 ## 0.1.0 (2026-10-20)
 
 First release.

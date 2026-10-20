@@ -227,7 +227,7 @@ REPLY gets nil for a notification."
                                                         asked
                                                       (car a2ui-mcp-protocol-versions))
                                   "capabilities" (a2ui-obj "tools" (a2ui-obj))
-                                  "serverInfo" (a2ui-obj "name" "a2ui" "version" "0.1.0")
+                                  "serverInfo" (a2ui-obj "name" "a2ui" "version" "0.1.1")
                                   "instructions" "Use render_a2ui to show the user interactive UI in Emacs; call a2ui_catalog first for the components.")))))
         ("ping" (funcall reply (a2ui-mcp--result id (a2ui-obj))))
         ("tools/list" (funcall reply (a2ui-mcp--result id (a2ui-obj "tools" (a2ui-mcp-tools host)))))

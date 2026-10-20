@@ -5,7 +5,7 @@
 ;; Author: Chaz Straney <chaz.straney@gmail.com>
 ;; Maintainer: Chaz Straney <chaz.straney@gmail.com>
 ;; URL: https://github.com/chazu/a2ui.el
-;; Version: 0.1.0
+;; Version: 0.1.1
 ;; Package-Requires: ((emacs "29.1") (vui "1.4.0"))
 ;; Keywords: tools, comm
 ;; SPDX-License-Identifier: GPL-3.0-or-later
