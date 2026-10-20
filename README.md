@@ -26,7 +26,7 @@ Let AI agents draw native, interactive UI in Emacs: forms, tables, diffs and pic
 ## Requirements
 
 - Emacs 29.1 or later
-- [vui.el](https://github.com/d12frosted/vui.el) from MELPA. **NOTE** The older `1.4.0` on MELPA-stable is not enough. When I have tidied this project up enough to not be an embarassing slop-bucket, I will ask the maintainer for a new release. Until then, don't use melpa-stable.
+- [vui.el](https://github.com/d12frosted/vui.el) from MELPA. **NOTE** The older `1.4.0` on MELPA-stable is not enough. When I have tidied this project up enough to not be an embarrassing slop-bucket, I will ask the maintainer for a new release. Until then, don't use melpa-stable.
 - `curl` 7.76 or later, for talking to AG-UI agents
 - For a given agent: [gptel](https://github.com/karthink/gptel), [agent-shell](https://github.com/xenodium/agent-shell), Claude Code or Codex, as below
 
