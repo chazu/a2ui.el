@@ -17,4 +17,5 @@ First release.
 - Common model mistakes in components (a `props` wrapper, inline children) are repaired before validation.
 - Validation checks the shape of actions and of dynamic values, so a string `event` or a `{"bind": …}` object comes back to the model as an error instead of a dead button.
 - a2ui_await_action returns at once for a surface that doesn't exist or failed to render, and ends with `closed` when you delete the surface.
+- Inline surfaces: `a2ui-vui-insert-surface` draws a live surface at a position in any buffer, which stays editable around it. `a2ui-gptel-inline-surfaces` and `a2ui-agent-shell-inline-surfaces` put surfaces in the chat or shell. A session's `display-fn` decides where new surfaces go.
 - gptel: free-form object arguments (`data`) travel as JSON text, since gptel closes object schemas. A press waits while gptel runs tools, not only while a request is open.

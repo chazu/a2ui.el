@@ -12,7 +12,8 @@
 ;; Load this file through Eldev, with agent-shell and its dependencies
 ;; on the load path, and call `a2ui-drive-agent-shell'.  A2UI_PROMPT,
 ;; when set, replaces the request (it should still ask for an Approve
-;; button outside any tab or modal, for the driver to press).
+;; button outside any tab or modal, for the driver to press).  With
+;; A2UI_INLINE set, the surface is drawn in the shell buffer itself.
 
 ;;; Code:
 
@@ -44,6 +45,7 @@
          (default-directory project)
          (a2ui-log-messages nil)
          (agent-shell-session-strategy 'new)
+         (a2ui-agent-shell-inline-surfaces (and (getenv "A2UI_INLINE") t))
          ready buffer host)
     (a2ui-agent-shell-setup)
     (setq buffer (agent-shell-start :config (agent-shell-anthropic-make-claude-code-config)))
@@ -55,20 +57,26 @@
     (with-current-buffer buffer
       (agent-shell-insert :text (or (getenv "A2UI_PROMPT") a2ui-drive-agent-shell--prompt)
                           :submit t :shell-buffer buffer))
-    ;; Wait for the surface and for the turn to end.
+    ;; Wait for the surface and for the turn to end (and, inline, for
+    ;; the surface to be drawn in the shell).
     (unless (a2ui-drive-agent-shell--wait
              (lambda ()
                (setq host (and (buffer-local-value 'a2ui-agent-shell--url buffer)
                                (gethash (car (last (split-string (buffer-local-value 'a2ui-agent-shell--url buffer) "/")))
                                         a2ui-mcp--hosts)))
                (and host (a2ui-session-surface-ids (a2ui-tools-host-session host))
-                    (not (with-current-buffer buffer (shell-maker-busy)))))
+                    (not (with-current-buffer buffer (shell-maker-busy)))
+                    (or (not a2ui-agent-shell-inline-surfaces)
+                        (with-current-buffer buffer
+                          (save-excursion (goto-char (point-min)) (search-forward "┌─ " nil t))))))
              300)
       (princ (format "FAIL: no surface\n%s\n" (with-current-buffer buffer (buffer-string))))
       (kill-emacs 1))
     (let* ((session (a2ui-tools-host-session host))
            (surface (a2ui-session-surface session (car (a2ui-session-surface-ids session))))
-           (sbuffer (car (a2ui-vui--view session (a2ui-surface-id surface))))
+           (sbuffer (if a2ui-agent-shell-inline-surfaces
+                        buffer
+                      (car (a2ui-vui--view session (a2ui-surface-id surface)))))
            (button (seq-find (lambda (c) (and (equal (gethash "component" c) "Button")
                                               (string-match-p "approve" (downcase (concat (gethash "id" c) " "
                                                                                            (a2ui-vui-label surface (gethash "child" c) nil))))))
@@ -78,7 +86,15 @@
                      (string-join (seq-uniq (mapcar (lambda (c) (gethash "component" c))
                                                     (hash-table-values (a2ui-surface-components surface))))
                                   " ")
-                     (with-current-buffer sbuffer (string-trim-right (buffer-substring-no-properties (point-min) (point-max))))))
+                     (with-current-buffer sbuffer
+                       (string-trim-right
+                        (if a2ui-agent-shell-inline-surfaces
+                            ;; The surface and the lines around it.
+                            (save-excursion
+                              (goto-char (point-min))
+                              (search-forward "┌─ ")
+                              (buffer-substring-no-properties (line-beginning-position -2) (point-max)))
+                          (buffer-substring-no-properties (point-min) (point-max)))))))
       (unless button (princ "FAIL: no Approve button\n") (kill-emacs 1))
       (with-current-buffer sbuffer
         (vui-goto-key (concat (gethash "id" button) "@"))

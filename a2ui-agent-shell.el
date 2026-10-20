@@ -42,6 +42,7 @@
 (require 'subr-x)
 (require 'a2ui-tools)
 (require 'a2ui-mcp)
+(require 'a2ui-vui)
 
 (defcustom a2ui-agent-shell-auto-approve t
   "When non-nil, agents may use a2ui's tools without asking each time.
@@ -51,7 +52,16 @@ effect through `a2ui-agent-shell-setup'."
   :type 'boolean
   :group 'a2ui)
 
+(defcustom a2ui-agent-shell-inline-surfaces nil
+  "When non-nil, draw surfaces in the agent-shell buffer itself.
+Each new surface appears above the prompt when the agent's turn ends.
+When nil, each surface gets a buffer of its own."
+  :type 'boolean
+  :group 'a2ui)
+
 (defvar agent-shell-mcp-servers)
+(defvar comint-last-prompt)
+(declare-function agent-shell-subscribe-to "agent-shell" (&rest args))
 (defvar agent-shell-permission-responder-function)
 (declare-function agent-shell-insert "agent-shell" (&rest args))
 (declare-function agent-shell-cwd "agent-shell" ())
@@ -60,6 +70,44 @@ effect through `a2ui-agent-shell-setup'."
 
 (defvar-local a2ui-agent-shell--url nil
   "This shell's a2ui MCP endpoint.")
+
+(defvar-local a2ui-agent-shell--pending nil
+  "Ids of surfaces to draw inline when the agent's turn ends.")
+
+(defvar-local a2ui-agent-shell--subscribed nil
+  "Non-nil once this shell tells a2ui when turns end.")
+
+(defun a2ui-agent-shell--show-inline (buffer session surface-id)
+  "Draw SURFACE-ID of SESSION in shell BUFFER when the turn ends."
+  (with-current-buffer buffer
+    (unless (member surface-id a2ui-agent-shell--pending)
+      (setq a2ui-agent-shell--pending (append a2ui-agent-shell--pending (list surface-id))))
+    (unless a2ui-agent-shell--subscribed
+      (setq a2ui-agent-shell--subscribed t)
+      (agent-shell-subscribe-to :shell-buffer buffer :event 'turn-complete
+                                :on-event (lambda (_)
+                                            (a2ui-agent-shell--insert-pending buffer session))))
+    (unless (and (fboundp 'shell-maker-busy) (shell-maker-busy))
+      (a2ui-agent-shell--insert-pending buffer session))))
+
+(defun a2ui-agent-shell--insert-pending (buffer session)
+  "Draw BUFFER's waiting surfaces of SESSION above its prompt."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (when-let* ((ids (prog1 a2ui-agent-shell--pending (setq a2ui-agent-shell--pending nil)))
+                  (prompt (and comint-last-prompt (marker-position (car comint-last-prompt)))))
+        (dolist (id ids)
+          (when (a2ui-session-surface session id)
+            ;; Plain newlines on both sides: the shell's own text is
+            ;; read-only, and a surface re-renders at its edges.
+            (let ((inhibit-read-only t))
+              (save-excursion
+                (goto-char prompt)
+                (insert (propertize "\n\n" 'rear-nonsticky t))))
+            (let ((instance (a2ui-vui-insert-surface session id (1+ prompt))))
+              (setq prompt (1+ (or (cdr (vui--inline-bounds instance)) prompt))))))
+        ;; The prompt moved down; keep comint's idea of it.
+        (set-marker (car comint-last-prompt) prompt)))))
 
 (defun a2ui-agent-shell--submit (buffer text)
   "Send TEXT to the agent in shell BUFFER, queued if it is busy."
@@ -79,7 +127,11 @@ Called by agent-shell, in the shell buffer, when the shell starts."
                     :name (buffer-name buffer)
                     :directory (if (fboundp 'agent-shell-cwd) (agent-shell-cwd) default-directory)
                     :deliver (lambda (text) (a2ui-agent-shell--submit buffer text))))
+             (session (a2ui-tools-host-session host))
              (url (a2ui-mcp-register host)))
+        (when a2ui-agent-shell-inline-surfaces
+          (setf (a2ui-session-display-fn session)
+                (lambda (id) (a2ui-agent-shell--show-inline buffer session id))))
         (add-hook 'kill-buffer-hook (lambda () (a2ui-mcp-unregister url)) nil t)
         (setq a2ui-agent-shell--url url))))
 

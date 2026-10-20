@@ -345,7 +345,7 @@ The biggest risks are layout in a text buffer and the unstandardised parts of th
 | Re-render cost on each keystroke in large surfaces | Typing lag in long templated lists | Rely on vui reconciliation and keyed children; benchmark a 500-row template in milestone 2 |
 | How actions return over AG-UI is not standardised | Works with one stack, breaks with another | Frontend-tool path as default; `a2ui-agui-action-encoder` for others; fixture tests per stack |
 | A2UI v1.0 is a candidate | Message or catalog changes | Version-keyed dispatch from day one; track the evolution guide |
-| Embedding a surface inside another buffer (agent-shell transcript) | vui demos mount to their own buffer | v0.1 uses dedicated buffers; prototype marker-based mounting before promising inline surfaces |
+| Embedding a surface inside another buffer (agent-shell transcript) | vui demos mount to their own buffer | Done with `vui-mount-inline`; opt-in per host (see the implementation notes) |
 | Agent spoofs identity via `agentDisplayName` | User trusts a surface from the wrong agent | Header line shows the configured agent name, not the theme field, unless the user opts in |
 | Untrusted URLs in Image, Video, `openUrl` | Unexpected network access | Ask before fetching or opening external URLs; allowlist per agent |
 
@@ -429,5 +429,13 @@ Completing the design (after host integrations):
 - **Live results.**
   - gptel via OpenRouter: Claude Haiku 5.5 passed on both paths, carrying the bound reason. Qwen3-Coder passed after self-correcting. GPT-4o-mini finished one run in two.
   - agent-shell with Claude Code: the earlier review prompt passed again. A release review asking for tabs and a rollback Modal got Tabs, Modal, Table, Diff and OrgText, valid on the first try, and the Approve press came back as the next prompt.
-- **Still open:** inline surfaces at a marker inside agent-shell or gptel transcripts. vui mounts a component tree into a whole buffer, so it needs region mounting first. Also open: the demo GIF, which needs a graphical session, and MELPA submission once the repository is public.
+- **Inline surfaces.** vui's `vui-mount-inline` renders a component into a managed region of any buffer, which is the marker-based mounting the risk table asked to prototype.
+  - `a2ui-vui-insert-surface` mounts a framed, live surface view there; it re-renders with the surface like modals do.
+  - widget.el refuses every edit outside a field once a buffer has widgets, which would freeze a chat. An advice on `widget-before-change` lets edits through in buffers with inline surfaces, unless they touch a surface's own text.
+  - Caller properties (`gptel ignore`) are put back on the region after every render, from the view's `:on-mount`/`:on-update`.
+  - A session's new `display-fn` decides where new surfaces go.
+  - gptel (`a2ui-gptel-inline-surfaces`) draws them below the response once it ends. If the model is waiting in `a2ui_await_action`, its response cannot end, so pending surfaces open in their own buffers.
+  - agent-shell (`a2ui-agent-shell-inline-surfaces`) draws them above the prompt on `turn-complete`, between plain newlines, because the transcript and prompt are read-only. It then moves `comint-last-prompt` past them.
+  - Live: Haiku through gptel drew the form in the chat, and the press inside it went back as the next message. Claude through agent-shell drew a review above the prompt, and the Approve press inside the shell came back as the next prompt.
+- **Still open:** the demo GIF, which needs a graphical session, and MELPA submission once the repository is public.
 

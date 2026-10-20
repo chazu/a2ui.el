@@ -96,7 +96,7 @@ Every host gets the same four tools:
 | `a2ui_catalog` | The compact component list, or the full schema of named components |
 | `a2ui_await_action` | Wait for the user's next button press |
 
-Surfaces open in their own buffers (see `display-buffer-alist` under [Configuration](#configuration)). A button press reaches the model in one of two ways:
+Surfaces open in their own buffers (see `display-buffer-alist` under [Configuration](#configuration)), or inside the gptel chat or agent-shell buffer with the inline options below. A button press reaches the model in one of two ways:
 - as the result of a pending `a2ui_await_action`, when the model is waiting;
 - otherwise as your next message, in hosts that take messages (gptel, agent-shell).
 
@@ -122,6 +122,8 @@ Use a model that calls tools reliably. These were checked live with `examples/ag
 - GPT-4o-mini finished one run in two.
 - A 7B Ollama model ran the tools but often wrote its calls as text.
 
+To draw surfaces in the chat itself, set `a2ui-gptel-inline-surfaces` to t. Each surface appears below the response that drew it and stays live. gptel leaves it out of what it sends, and the rest of the chat stays editable. If the model waits in `a2ui_await_action` instead of ending its response, the surface opens in its own buffer, since the chat can't change mid-response.
+
 ### agent-shell (Claude Code, Codex, …)
 
 ```elisp
@@ -133,6 +135,8 @@ Use a model that calls tools reliably. These were checked live with `examples/ag
 ```
 
 `a2ui-agent-shell-setup` adds an a2ui MCP server to `agent-shell-mcp-servers`. Every shell started afterwards gets its own endpoint, so its surfaces and button presses stay with it. Ask for UI as usual. When you press a button, the press is submitted to that shell as your next prompt, or queued if the agent is busy.
+
+Set `a2ui-agent-shell-inline-surfaces` to t to draw surfaces in the shell buffer, above the prompt, when the agent's turn ends.
 
 The setup also installs a permission responder that approves a2ui's own tools, which only draw UI and report your clicks. Every other permission request is still asked as usual. Set `a2ui-agent-shell-auto-approve` to nil to be asked each time. This was verified with Claude Code through `claude-agent-acp`. Other ACP agents that accept HTTP MCP servers get the same tools.
 
@@ -256,6 +260,8 @@ In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels. A Modal's pop
 | `a2ui-tools-catalog-in-description` | `nil` | Put the catalog digest in `render_a2ui`'s description instead of on demand |
 | `a2ui-tools-await-timeout` | `120` | Seconds `a2ui_await_action` waits by default |
 | `a2ui-gptel-send-actions` | `t` | Send button presses to the gptel chat as messages |
+| `a2ui-gptel-inline-surfaces` | `nil` | Draw surfaces in the gptel chat buffer |
+| `a2ui-agent-shell-inline-surfaces` | `nil` | Draw surfaces in the agent-shell buffer |
 | `a2ui-agent-shell-auto-approve` | `t` | Approve a2ui's own tools in agent-shell |
 | `a2ui-mcp-port`, `a2ui-mcp-token` | `0`, `nil` | Pin the `a2ui-mcp-start` endpoint across sessions |
 | `a2ui-agui-agents` | `nil` | Agents as `(NAME :url URL :headers ALIST [:action-encoding ...])` |
@@ -288,6 +294,7 @@ To offer the A2UI tools in another host, make an `a2ui-tools-host` and pass tool
                                   (my-send-to-agent (a2ui-json-encode message))))))
   (a2ui-vui-attach session)               ; show surfaces as they appear
   (a2ui-apply-message session json-text)  ; feed messages from anywhere
+  (a2ui-vui-insert-surface session "form") ; or draw one at point, in any buffer
   (a2ui-catalog-digest (a2ui-catalog 'emacs)))  ; for the model's prompt
 ```
 

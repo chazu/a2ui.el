@@ -343,7 +343,8 @@ surface and scope.  BODY returns the function's JSON result."
   (surfaces (make-hash-table :test 'equal))
   (catalogs (make-hash-table :test 'equal)) ; catalog id -> a2ui-catalog
   send-action-fn                            ; (lambda (message metadata))
-  on-change-fn)                             ; (lambda (surface-id))
+  on-change-fn                              ; (lambda (surface-id))
+  display-fn)                               ; (lambda (surface-id)) shows a new surface
 
 (cl-defstruct (a2ui-surface (:constructor a2ui--surface-make) (:copier nil))
   "One A2UI surface: a component map plus its data model."

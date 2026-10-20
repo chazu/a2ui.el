@@ -17,6 +17,7 @@
 (defvar agent-shell-mcp-servers)
 (defvar agent-shell-permission-responder-function)
 (defvar gptel--fsm-last)
+(defvar comint-last-prompt)
 
 (defun a2ui-hosts-test--host (&optional deliver)
   "Return a host, without a renderer, that delivers with DELIVER."
@@ -276,6 +277,13 @@ Emacs keeps serving requests while it waits."
 
 ;;;; gptel
 
+(defun a2ui-hosts-test--eventually (pred)
+  "Return PRED's value once non-nil, letting timers run for up to 2s."
+  (let ((deadline (+ (float-time) 2)) value)
+    (while (and (not (setq value (funcall pred))) (< (float-time) deadline))
+      (sleep-for 0.01))
+    value))
+
 (defun a2ui-hosts-test--gptel-call (tool json)
   "Run gptel TOOL with JSON args the way gptel does; return the result."
   (let ((args (gptel--json-read-string json))
@@ -334,6 +342,56 @@ Emacs keeps serving requests while it waits."
         (a2ui-hosts-test--press (a2ui-gptel-host) "f" "go"))
       (should (= 1 (length sent)))
       (should (string-match-p "\\`### hello\nUser performed action \"submit\"" (car sent))))))
+
+(ert-deftest a2ui-hosts-gptel-inline ()
+  (let ((a2ui-tools-host-functions '(a2ui-vui-attach))
+        (a2ui-vui-auto-show t)
+        (a2ui-gptel-inline-surfaces t)
+        (render (car (a2ui-gptel-tools))))
+    (with-temp-buffer
+      (setq-local gptel-mode t)
+      (insert "### show a form\n")
+      ;; While a response is in progress the surface waits for its end.
+      (setq-local gptel--fsm-last (gptel-make-fsm :state 'TOOL :info (list :buffer (current-buffer))))
+      (a2ui-hosts-test--gptel-call render a2ui-hosts-test--form)
+      (should (equal a2ui-gptel--pending '("f")))
+      (should-not (a2ui-vui--view (a2ui-tools-host-session (a2ui-gptel-host)) "f"))
+      (insert "Here is the form.")
+      (let ((end (point-max)))
+        (insert "\n\n### ")
+        (setf (gptel-fsm-state gptel--fsm-last) 'DONE)
+        (run-hook-with-args 'gptel-post-response-functions 1 end))
+      (should-not a2ui-gptel--pending)
+      (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+        (should (string-match-p "Here is the form\\.\n┌─ f\nName: Ada *\n\\[Go]\n└─\n\n\n### \\'" text)))
+      ;; gptel leaves the surface out of the prompt.
+      (goto-char (point-min))
+      (search-forward "Name:")
+      (should (eq (get-text-property (point) 'gptel) 'ignore))
+      ;; Not busy: a new surface shows at once, at the end.
+      (a2ui-hosts-test--gptel-call render "{\"surfaceId\":\"g\",\"components\":[{\"id\":\"root\",\"component\":\"Text\",\"text\":\"later\"}]}")
+      (should (a2ui-hosts-test--eventually
+               (lambda () (string-match-p "┌─ g\nlater\n└─\n\\'"
+                                          (buffer-substring-no-properties (point-min) (point-max)))))))))
+
+(ert-deftest a2ui-hosts-gptel-inline-await ()
+  ;; A model that waits never ends its response: the surface opens apart.
+  (let* ((a2ui-tools-host-functions '(a2ui-vui-attach))
+         (a2ui-vui-auto-show t)
+         (a2ui-gptel-inline-surfaces t)
+         (tools (a2ui-gptel-tools))
+         (await (seq-find (lambda (tool) (equal (gptel-tool-name tool) "a2ui_await_action")) tools)))
+    (with-temp-buffer
+      (setq-local gptel-mode t)
+      (setq-local gptel--fsm-last (gptel-make-fsm :state 'TOOL :info (list :buffer (current-buffer))))
+      (a2ui-hosts-test--gptel-call (car tools) a2ui-hosts-test--form)
+      (should (equal a2ui-gptel--pending '("f")))
+      (save-window-excursion
+        (a2ui-hosts-test--gptel-call await "{\"surfaceId\":\"f\"}"))
+      (should-not a2ui-gptel--pending)
+      (let ((buffer (car (a2ui-vui--view (a2ui-tools-host-session (a2ui-gptel-host)) "f"))))
+        (should (buffer-live-p buffer))
+        (kill-buffer buffer)))))
 
 (ert-deftest a2ui-hosts-gptel-enable ()
   (let ((gptel-tools nil)
@@ -398,6 +456,42 @@ Emacs keeps serving requests while it waits."
           (should (= 1 (length inserted)))
           (kill-buffer (current-buffer))
           (should-not (gethash (car (last (split-string url "/"))) a2ui-mcp--hosts)))))))
+
+(ert-deftest a2ui-hosts-agent-shell-inline ()
+  (let ((a2ui-tools-host-functions '(a2ui-vui-attach))
+        (a2ui-vui-auto-show t)
+        (a2ui-agent-shell-inline-surfaces t)
+        (busy t) (on-turn nil))
+    (with-current-buffer (generate-new-buffer "*agent-shell inline test*")
+      (unwind-protect
+          (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () "/tmp/project/"))
+                    ((symbol-function 'shell-maker-busy) (lambda () busy))
+                    ((symbol-function 'agent-shell-subscribe-to)
+                     (lambda (&rest args) (setq on-turn (plist-get args :on-event)))))
+            ;; A transcript in read-only text, then the prompt.
+            (let ((inhibit-read-only t))
+              (insert (propertize "Agent> drew a form\n" 'read-only t))
+              (let ((start (point)))
+                (insert (propertize "Agent> " 'read-only t 'front-sticky '(read-only) 'rear-nonsticky t))
+                (setq-local comint-last-prompt (cons (copy-marker start) (copy-marker (point) t)))))
+            (let* ((url (a2ui-agent-shell-url))
+                   (host (gethash (car (last (split-string url "/"))) a2ui-mcp--hosts)))
+              (a2ui-hosts-test--call host "render_a2ui" a2ui-hosts-test--form)
+              (should (equal a2ui-agent-shell--pending '("f")))
+              (should on-turn)
+              ;; The turn ends: the surface goes above the prompt.
+              (setq busy nil)
+              (funcall on-turn nil)
+              (should (string-match-p "\\`Agent> drew a form\n\n┌─ f\nName: Ada *\n\\[Go]\n└─\n\nAgent> \\'"
+                                      (buffer-substring-no-properties (point-min) (point-max))))
+              (should (equal (buffer-substring-no-properties (car comint-last-prompt) (point-max)) "Agent> "))
+              ;; It still works, and so does typing after the prompt.
+              (vui-goto-key "name@")
+              (should (widget-field-at (point)))
+              (goto-char (point-max))
+              (insert "next question")
+              (should (string-suffix-p "Agent> next question" (buffer-string)))))
+        (kill-buffer (current-buffer))))))
 
 (provide 'a2ui-hosts-test)
 ;;; a2ui-hosts-test.el ends here

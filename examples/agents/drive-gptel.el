@@ -7,7 +7,8 @@
 ;; reaches the model, either through a2ui_await_action or as the next
 ;; chat message (with A2UI_GPTEL_CHAT set).  A2UI_GPTEL_BACKEND picks
 ;; the backend: "ollama" (the default, a local model) or "openrouter"
-;; (needs OPENROUTER_API_KEY).  A2UI_GPTEL_MODEL picks the model.  Load
+;; (needs OPENROUTER_API_KEY).  A2UI_GPTEL_MODEL picks the model, and
+;; A2UI_INLINE draws the surface in the chat buffer.  Load
 ;; this file through Eldev and call `a2ui-drive-gptel'.
 
 ;;; Code:
@@ -59,6 +60,7 @@
          (a2ui-log-messages nil)
          ;; Small local models rarely call a2ui_catalog on their own.
          (a2ui-tools-catalog-in-description local)
+         (a2ui-gptel-inline-surfaces (and (getenv "A2UI_INLINE") t))
          (buffer (get-buffer-create "*gptel a2ui*")))
     (princ (format "backend: %s  model: %s\n" backend model))
     (a2ui-gptel-enable)
@@ -74,6 +76,10 @@
                    (let ((host (buffer-local-value 'a2ui-gptel--host buffer)))
                      (and host (a2ui-session-surface-ids (a2ui-tools-host-session host))
                           (or (a2ui-tools-host-waiters host) (not (a2ui-gptel--busy-p buffer)))
+                          ;; Inline, the surface is drawn when the response ends.
+                          (or (not a2ui-gptel-inline-surfaces)
+                              (with-current-buffer buffer
+                                (save-excursion (goto-char (point-min)) (search-forward "┌─ " nil t))))
                           host)))
                  300)))
       (unless host
@@ -81,7 +87,9 @@
         (kill-emacs 1))
       (let* ((session (a2ui-tools-host-session host))
              (surface (a2ui-session-surface session (car (a2ui-session-surface-ids session))))
-             (sbuffer (car (a2ui-vui--view session (a2ui-surface-id surface))))
+             (sbuffer (if a2ui-gptel-inline-surfaces
+                          buffer
+                        (car (a2ui-vui--view session (a2ui-surface-id surface)))))
              (button (seq-find (lambda (c) (and (equal (gethash "component" c) "Button")
                                                 (string-match-p "approve" (downcase (concat (gethash "id" c) " "
                                                                                              (a2ui-vui-label surface (gethash "child" c) nil))))))

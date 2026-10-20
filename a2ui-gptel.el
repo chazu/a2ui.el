@@ -42,6 +42,7 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'a2ui-tools)
+(require 'a2ui-vui)
 
 (defcustom a2ui-gptel-send-actions t
   "When non-nil, send button presses to the model as chat messages.
@@ -51,18 +52,59 @@ buffer, they wait for the model to call a2ui_await_action."
   :type 'boolean
   :group 'a2ui)
 
+(defcustom a2ui-gptel-inline-surfaces nil
+  "When non-nil, draw surfaces in the gptel chat buffer itself.
+Each new surface appears below the response that drew it, once that
+response is done, and gptel leaves it out of what it sends.  If the
+model waits for a press in a2ui_await_action instead of ending its
+response, the surface opens in its own buffer.  When nil, or outside
+a chat buffer, each surface gets a buffer of its own."
+  :type 'boolean
+  :group 'a2ui)
+
 (defvar gptel-tools)
 (defvar gptel-mode)
 (defvar gptel--request-alist)
 (defvar gptel-post-response-functions)
 (declare-function gptel-make-tool "gptel-request" (&rest slots))
 (declare-function gptel-send "gptel" (&optional arg))
+(declare-function gptel-prompt-prefix-string "gptel" ())
 (declare-function gptel-fsm-info "gptel-request" (fsm))
 (declare-function gptel-tool-name "gptel-request" (tool))
 (declare-function gptel--fsm-live-p "gptel" (&optional fsm))
 
 (defvar-local a2ui-gptel--host nil
   "This buffer's A2UI host.")
+
+(defvar-local a2ui-gptel--pending nil
+  "Ids of surfaces to draw inline when the current response ends.")
+
+(defun a2ui-gptel--show-inline (buffer surface-id)
+  "Draw SURFACE-ID in chat BUFFER once the response in progress ends."
+  (with-current-buffer buffer
+    (unless (member surface-id a2ui-gptel--pending)
+      (setq a2ui-gptel--pending (append a2ui-gptel--pending (list surface-id))))
+    (add-hook 'gptel-post-response-functions #'a2ui-gptel--insert-pending nil t)
+    (unless (a2ui-gptel--busy-p buffer)
+      (a2ui-gptel--insert-pending nil (point-max)))))
+
+(defun a2ui-gptel--show-pending-apart ()
+  "Show the surfaces waiting for the response's end in their own buffers.
+A model waiting in a2ui_await_action does not end its response, and
+gptel is still writing to the chat, so they cannot wait for it."
+  (when-let* ((host a2ui-gptel--host))
+    (dolist (id (prog1 a2ui-gptel--pending (setq a2ui-gptel--pending nil)))
+      (when (a2ui-session-surface (a2ui-tools-host-session host) id)
+        (a2ui-show-surface (a2ui-tools-host-session host) id)))))
+
+(defun a2ui-gptel--insert-pending (_beg end)
+  "Draw the surfaces waiting to be shown, below the response ending at END."
+  (let ((pos (min (or end (point-max)) (point-max)))
+        (session (a2ui-tools-host-session a2ui-gptel--host)))
+    (dolist (id (prog1 a2ui-gptel--pending (setq a2ui-gptel--pending nil)))
+      (when (a2ui-session-surface session id)
+        (let ((instance (a2ui-vui-insert-surface session id pos '(gptel ignore))))
+          (setq pos (or (cdr (vui--inline-bounds instance)) pos)))))))
 
 (defun a2ui-gptel--busy-p (buffer)
   "Return non-nil while a gptel request for BUFFER is in flight.
@@ -86,20 +128,27 @@ While a request is in flight, wait for it to finish."
         (add-hook 'gptel-post-response-functions retry))
     (with-current-buffer buffer
       (goto-char (point-max))
-      (unless (bolp) (insert "\n"))
+      ;; Beside gptel's prompt prefix, or on a line of its own.
+      (unless (or (bolp)
+                  (and (fboundp 'gptel-prompt-prefix-string)
+                       (looking-back (regexp-quote (gptel-prompt-prefix-string)) (line-beginning-position))))
+        (insert "\n"))
       (insert text)
       (gptel-send))))
 
 (defun a2ui-gptel-host ()
   "Return the current buffer's A2UI host, making it on first use."
   (or a2ui-gptel--host
-      (let ((buffer (current-buffer)))
-        (setq a2ui-gptel--host
-              (a2ui-tools-host-create
-               :name (buffer-name buffer)
-               :directory default-directory
-               :deliver (and a2ui-gptel-send-actions (bound-and-true-p gptel-mode)
-                             (lambda (text) (a2ui-gptel--send buffer text))))))))
+      (let* ((buffer (current-buffer))
+             (host (a2ui-tools-host-create
+                    :name (buffer-name buffer)
+                    :directory default-directory
+                    :deliver (and a2ui-gptel-send-actions (bound-and-true-p gptel-mode)
+                                  (lambda (text) (a2ui-gptel--send buffer text))))))
+        (when (and a2ui-gptel-inline-surfaces (bound-and-true-p gptel-mode))
+          (setf (a2ui-session-display-fn (a2ui-tools-host-session host))
+                (lambda (id) (a2ui-gptel--show-inline buffer id))))
+        (setq a2ui-gptel--host host))))
 
 (defun a2ui-gptel--plist (value)
   "Return the JSON VALUE as a plist with keyword keys, for gptel."
@@ -158,6 +207,8 @@ false), which would forbid any key, so these are passed as JSON text."
                                    (setq v (condition-case nil (a2ui-json-parse v) (error v))))
                                  (when v (puthash n (a2ui-tools-from-lisp v) obj)))
                                names values)
+                      (when (equal name "a2ui_await_action")
+                        (a2ui-gptel--show-pending-apart))
                       (a2ui-tools-call (a2ui-gptel-host) name obj callback))))))
    (a2ui-tools-specs nil)))
 

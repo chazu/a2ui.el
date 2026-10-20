@@ -586,6 +586,72 @@ The golden file holds each surface's text and the a2ui faces in it."
       (should (string-match-p "example.com/clip.mp4" asked))
       (should (equal opened "https://example.com/clip.mp4")))))
 
+;;;; Inline surfaces
+
+(defun a2ui-vui-test--settle-inline (instance)
+  "Wait until inline INSTANCE has no render pending."
+  (let ((deadline (+ (float-time) 5)))
+    (while (and (vui-instance-render-timer instance) (< (float-time) deadline))
+      (sleep-for 0.01))))
+
+(ert-deftest a2ui-vui-inline-surface ()
+  (let* ((a2ui-vui-test--sent nil)
+         (a2ui-log-messages nil)
+         (a2ui-vui-auto-show nil)
+         (session (a2ui-vui-test--session)))
+    (a2ui-vui-test--replay session (a2ui-vui-test--catalog "Modal"))
+    (with-temp-buffer
+      (insert "### question\nanswer")
+      (let ((instance (a2ui-vui-insert-surface session "s" (point-max) '(gptel ignore))))
+        (a2ui-vui-test--settle-inline instance)
+        (goto-char (point-max))
+        (insert "\n### next")
+        (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+          ;; A fresh line, a frame, the surface, then the text after it.
+          (should (string-match-p "\\`### question\nanswer\n┌─ s\nSettings\n\\[Edit name]" text))
+          (should (string-match-p "└─\n\n### next\\'" text)))
+        ;; Its own buffer was not opened.
+        (should-not (a2ui-vui--view session "s"))
+        ;; Text around it stays editable; its own text is marked.
+        (goto-char (point-min))
+        (insert "> ")
+        (goto-char (point-max))
+        (insert "!")
+        (should (eq (get-text-property (progn (goto-char (point-min)) (search-forward "Settings") (point)) 'gptel)
+                    'ignore))
+        (should-not (get-text-property (- (point-max) 1) 'gptel))
+        ;; It is live: data updates show, and keep the properties.
+        (save-window-excursion
+          (save-current-buffer (a2ui-vui-test--press "open@")))
+        (should-not (a2ui-vui-test--actions))
+        (let ((modal (get-buffer "*a2ui: s/modal*")))
+          (unwind-protect
+              (progn (a2ui-vui-test--settle modal)
+                     (with-current-buffer modal (a2ui-vui-test--press "save@")))
+            (kill-buffer modal)))
+        (should (equal (gethash "name" (car (a2ui-vui-test--actions))) "save"))
+        (a2ui-apply-message session "{\"version\":\"v0.9\",\"updateComponents\":{\"surfaceId\":\"s\",\"components\":[{\"id\":\"title\",\"component\":\"Text\",\"text\":\"Profile\"}]}}")
+        (a2ui-vui-test--settle-inline instance)
+        (goto-char (point-min))
+        (should (search-forward "Profile" nil t))
+        (should (eq (get-text-property (point) 'gptel) 'ignore))
+        ;; Unmounting removes it and leaves the rest.
+        (vui-unmount instance)
+        (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                       "> ### question\nanswer\n### next!"))))))
+
+(ert-deftest a2ui-vui-display-fn ()
+  ;; A session with a display function decides where new surfaces go.
+  (let* ((a2ui-vui-test--sent nil)
+         (a2ui-log-messages nil)
+         (a2ui-vui-auto-show t)
+         (shown nil)
+         (session (a2ui-vui-test--session)))
+    (setf (a2ui-session-display-fn session) (lambda (id) (push id shown)))
+    (a2ui-vui-test--replay session (a2ui-vui-test--catalog "Text"))
+    (should (equal (delete-dups shown) '("s")))
+    (should-not (a2ui-vui--view session "s"))))
+
 ;;;; Images
 
 (defconst a2ui-vui-test--png "\x89PNG\r\n\x1a\n\0\0\0\rIHDR"

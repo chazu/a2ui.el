@@ -963,22 +963,30 @@ SCOPE is the item path C renders in."
   (when-let* ((views (gethash session a2ui-vui--views)))
     (gethash surface-id views)))
 
-(defvar a2ui-vui--modals (make-hash-table :test 'eq :weakness 'key)
-  "Session -> list of (SURFACE-ID . BUMP-FN) of open modals.")
+(defvar a2ui-vui--extra-views (make-hash-table :test 'eq :weakness 'key)
+  "Session -> list of (SURFACE-ID . BUMP-FN) of open modals and inline views.")
 
-(defun a2ui-vui--bump-modals (session surface-id)
-  "Re-render the open modals of SURFACE-ID in SESSION."
-  (dolist (modal (gethash session a2ui-vui--modals))
-    (when (equal (car modal) surface-id)
-      (funcall (cdr modal)))))
+(defun a2ui-vui--bump-extra (session surface-id)
+  "Re-render the modals and inline views of SURFACE-ID in SESSION.
+Return non-nil if there were any."
+  (let (found)
+    (dolist (view (gethash session a2ui-vui--extra-views))
+      (when (equal (car view) surface-id)
+        (setq found t)
+        (funcall (cdr view))))
+    found))
 
 (defun a2ui-vui--on-change (session surface-id)
-  "Re-render the view of SURFACE-ID in SESSION, showing new surfaces."
-  (a2ui-vui--bump-modals session surface-id)
-  (if-let* ((view (a2ui-vui--view session surface-id)))
-      (funcall (cdr view))
-    (when (and a2ui-vui-auto-show (a2ui-session-surface session surface-id))
-      (a2ui-show-surface session surface-id))))
+  "Re-render the views of SURFACE-ID in SESSION, showing new surfaces.
+A new surface goes to the session's `display-fn' when it has one, and
+to a buffer of its own otherwise."
+  (let ((elsewhere (a2ui-vui--bump-extra session surface-id)))
+    (if-let* ((view (a2ui-vui--view session surface-id)))
+        (funcall (cdr view))
+      (when (and a2ui-vui-auto-show (not elsewhere) (a2ui-session-surface session surface-id))
+        (if-let* ((display (a2ui-session-display-fn session)))
+            (funcall display surface-id)
+          (a2ui-show-surface session surface-id))))))
 
 (defun a2ui-vui-attach (session)
   "Make this renderer SESSION's change listener.
@@ -1031,7 +1039,7 @@ An existing `on-change-fn' keeps being called."
 
 (defun a2ui-vui-refresh (surface)
   "Re-render the view of SURFACE, and its open modals, if it has them."
-  (a2ui-vui--bump-modals (a2ui-surface-session surface) (a2ui-surface-id surface))
+  (a2ui-vui--bump-extra (a2ui-surface-session surface) (a2ui-surface-id surface))
   (when-let* ((view (a2ui-vui--view (a2ui-surface-session surface) (a2ui-surface-id surface))))
     (funcall (cdr view))))
 
@@ -1064,6 +1072,81 @@ and \\`q' buries the buffer.
     (setq-local revert-buffer-function #'a2ui-surface-refresh)
     (setq header-line-format '(:eval (a2ui-vui--header-line)))))
 
+;;;; Inline surfaces
+
+(defvar-local a2ui-vui--inline-p nil
+  "Non-nil in a buffer that holds inline A2UI surfaces.")
+
+(defun a2ui-vui--outside-inline-edit (orig from to)
+  "Call ORIG, `widget-before-change', unless FROM to TO is outside inline views.
+widget.el refuses every edit outside a field in a buffer with widgets,
+which would freeze the rest of a chat buffer around an inline surface.
+Its text stays protected."
+  (unless (and a2ui-vui--inline-p (not (a2ui-vui--inline-change-p from to)))
+    (funcall orig from to)))
+
+(defun a2ui-vui--inline-change-p (from to)
+  "Return non-nil if changing the text from FROM to TO touches an inline view.
+Insertion at either edge of a view is outside it."
+  (seq-some (lambda (instance)
+              (pcase (vui--inline-bounds instance)
+                (`(,start . ,end) (if (= from to)
+                                      (< start from end)
+                                    (and (< from end) (> to start))))))
+            vui--inline-instances))
+
+(defun a2ui-vui--mark-inline (properties)
+  "Put PROPERTIES on the region of the inline view now mounting or updating."
+  (pcase (and vui--current-instance (vui--inline-bounds vui--current-instance))
+    (`(,start . ,end)
+     (with-silent-modifications
+       (add-text-properties start end (append '(rear-nonsticky t) properties))))))
+
+(vui-defcomponent a2ui-vui-inline-view (session surface-id properties newline)
+  :state ((tick 0))
+  :on-mount
+  (let ((view (cons surface-id (vui-with-async-context (vui-set-state :tick #'1+)))))
+    (push view (gethash session a2ui-vui--extra-views))
+    (a2ui-vui--mark-inline properties)
+    (lambda () (puthash session (delq view (gethash session a2ui-vui--extra-views)) a2ui-vui--extra-views)))
+  :on-update (a2ui-vui--mark-inline properties)
+  :render
+  (let ((surface (a2ui-session-surface session surface-id)))
+    (ignore tick)
+    (vui-fragment
+     (when newline (vui-newline))
+     (vui-vstack
+      (vui-text (format "┌─ %s" surface-id) :face 'a2ui-rule)
+      (cond ((null surface)
+             (vui-text (format "Surface %s was deleted." surface-id) :face 'shadow))
+            ((a2ui-surface-component surface "root")
+             (a2ui-vui-render surface "root" nil))
+            (t (vui-text "Waiting for agent…" :face 'shadow)))
+      (vui-text "└─" :face 'a2ui-rule))
+     (vui-newline))))
+
+(defun a2ui-vui-insert-surface (session surface-id &optional position properties)
+  "Show SURFACE-ID of SESSION inside the current buffer, at POSITION.
+POSITION defaults to point.  The surface is live, as in its own
+buffer, and the rest of the buffer stays editable.  PROPERTIES, a
+plist, go on its text after every render, e.g. (gptel ignore) to keep
+it out of a gptel prompt.  Return the vui instance; `vui-unmount'
+removes the surface again."
+  (a2ui-vui-attach session)
+  (advice-add 'widget-before-change :around #'a2ui-vui--outside-inline-edit)
+  (setq a2ui-vui--inline-p t)
+  (let ((pos (or position (point))))
+    (vui-mount-inline (vui-component 'a2ui-vui-inline-view
+                                     :session session :surface-id surface-id
+                                     :properties properties
+                                     :newline (save-excursion (goto-char pos) (not (bolp))))
+                      pos)))
+
+(defun a2ui-vui-unload-function ()
+  "Remove the advice `a2ui-vui-insert-surface' installs."
+  (advice-remove 'widget-before-change #'a2ui-vui--outside-inline-edit)
+  nil)
+
 ;;;; Modals
 
 (defcustom a2ui-vui-modal-display-action
@@ -1079,8 +1162,8 @@ take precedence."
   :state ((tick 0))
   :on-mount
   (let ((modal (cons surface-id (vui-with-async-context (vui-set-state :tick #'1+)))))
-    (push modal (gethash session a2ui-vui--modals))
-    (lambda () (puthash session (delq modal (gethash session a2ui-vui--modals)) a2ui-vui--modals)))
+    (push modal (gethash session a2ui-vui--extra-views))
+    (lambda () (puthash session (delq modal (gethash session a2ui-vui--extra-views)) a2ui-vui--extra-views)))
   :render
   (let ((surface (a2ui-session-surface session surface-id)))
     (ignore tick)
