@@ -12,11 +12,11 @@ jobs:
       matrix:
         emacs-version: ["29.1", "29.4", "30.1", "snapshot"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: jcs090218/setup-emacs@master
         with:
           version: ${{ matrix.emacs-version }}
-      - uses: emacs-eldev/setup-eldev@v1
+      - uses: emacs-eldev/setup-eldev@v1.5
       - name: Compile
         run: eldev -p -dtT compile --warnings-as-errors
       - name: Test
@@ -25,11 +25,11 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: jcs090218/setup-emacs@master
         with:
           version: "30.1"
-      - uses: emacs-eldev/setup-eldev@v1
+      - uses: emacs-eldev/setup-eldev@v1.5
       - name: package-lint
         run: eldev -p -dtT lint package
       - name: checkdoc

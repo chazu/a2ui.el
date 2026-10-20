@@ -161,16 +161,16 @@ evaluates to the messages to replay, which create SURFACE-ID (default
 
 (defconst a2ui-vui-test--emoji-width-fixtures '("04_weather-current")
   "Fixtures whose layout pads emoji presentation sequences such as ☀️.
-Their goldens measure those as one column, as released Emacs (up to
-31) does; Emacs 32.0.50 lays them out two columns wide, though
-`string-width' of the bare string is still one.")
+Emacs 32 composes those as one two-column emoji in a displayed buffer,
+where Emacs 31 and earlier measure one column, so these fixtures have a
+second golden, NAME.emacs32.txt.")
 
 (defun a2ui-vui-test--snapshot (fixture golden)
   "Render FIXTURE and compare every surface it creates with GOLDEN.
 The golden file holds each surface's text and the a2ui faces in it."
   (when (and (member (file-name-base fixture) a2ui-vui-test--emoji-width-fixtures)
-             (> emacs-major-version 31))
-    (ert-skip "Development Emacs lays out emoji presentation sequences differently"))
+             (>= emacs-major-version 32))
+    (setq golden (concat (file-name-sans-extension golden) ".emacs32.txt")))
   (let ((a2ui-vui-test--sent nil)
         (a2ui-vui-auto-show t)
         (a2ui-log-messages nil)
