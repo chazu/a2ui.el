@@ -1,0 +1,10 @@
+=== s
+▾ Details
+  Shown by default
+▸ Advanced
+▾ Bound
+  Follows /folded
+--- faces
+a2ui-emacs-section-heading: ▾ Details
+a2ui-emacs-section-heading: ▸ Advanced
+a2ui-emacs-section-heading: ▾ Bound

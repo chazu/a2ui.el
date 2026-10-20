@@ -1,0 +1,8 @@
+=== s
+a2ui-core.el:42
+README.md
+The design
+--- faces
+a2ui-link: a2ui-core.el:42
+a2ui-link: README.md
+a2ui-link: The design

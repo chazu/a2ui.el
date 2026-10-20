@@ -3,9 +3,10 @@
 ;; Copyright (C) 2026 Chaz Straney
 
 ;; Author: Chaz Straney <chaz.straney@gmail.com>
+;; Maintainer: Chaz Straney <chaz.straney@gmail.com>
 ;; URL: https://github.com/chazu/a2ui.el
-;; Version: 0.1.0
 ;; Keywords: tools, comm
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is not part of GNU Emacs.
 
@@ -110,10 +111,12 @@ returns a vui vnode."
   `(a2ui-vui--register ',catalog ,type (lambda ,arglist ,@body)))
 
 (defun a2ui-vui--renderer (surface type)
-  "Return the render function for TYPE in SURFACE's catalog, or nil."
-  (when-let* ((table (gethash (a2ui-catalog-name (a2ui-surface-catalog surface))
-                              a2ui-vui--renderers)))
-    (gethash type table)))
+  "Return the render function for TYPE in SURFACE's catalog, or nil.
+A catalog that extends another falls back to its renderers."
+  (seq-some (lambda (catalog)
+              (when-let* ((table (gethash (a2ui-catalog-name catalog) a2ui-vui--renderers)))
+                (gethash type table)))
+            (a2ui-catalog-ancestors (a2ui-surface-catalog surface))))
 
 ;;;; Rendering
 

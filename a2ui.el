@@ -3,10 +3,12 @@
 ;; Copyright (C) 2026 Chaz Straney
 
 ;; Author: Chaz Straney <chaz.straney@gmail.com>
+;; Maintainer: Chaz Straney <chaz.straney@gmail.com>
 ;; URL: https://github.com/chazu/a2ui.el
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "29.1") (vui "1.4.0"))
 ;; Keywords: tools, comm
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is not part of GNU Emacs.
 
@@ -43,6 +45,7 @@
 
 (require 'a2ui-core)
 (require 'a2ui-vui)
+(require 'a2ui-emacs)
 (require 'a2ui-agui)
 
 (defcustom a2ui-log-buffer-name "*a2ui-log*"

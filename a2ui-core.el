@@ -3,9 +3,10 @@
 ;; Copyright (C) 2026 Chaz Straney
 
 ;; Author: Chaz Straney <chaz.straney@gmail.com>
+;; Maintainer: Chaz Straney <chaz.straney@gmail.com>
 ;; URL: https://github.com/chazu/a2ui.el
-;; Version: 0.1.0
 ;; Keywords: tools, comm
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is not part of GNU Emacs.
 
@@ -127,27 +128,47 @@ the MESSAGE and its METADATA (nil for incoming messages).")
 (cl-defstruct (a2ui-catalog (:constructor a2ui--catalog-make) (:copier nil))
   "A component and function catalog, shared by every session using it."
   name id aliases schema-file
+  parent                                ; catalog symbol it extends
   (specs 'unloaded)                     ; hash: type -> spec, or nil
+  digest-cache                          ; cached `a2ui-catalog-digest'
   (functions (make-hash-table :test 'equal)))
 
 (defvar a2ui--catalogs (make-hash-table :test 'eq)
   "Registered catalogs, keyed by symbol.")
 
-(cl-defun a2ui-register-catalog (name &key id aliases schema)
+(cl-defun a2ui-register-catalog (name &key id aliases schema parent)
   "Register catalog NAME, a symbol, with catalog ID and SCHEMA file.
 ALIASES are other ids agents use for the same catalog.  SCHEMA is a
 JSON Schema catalog used to validate components; without it any
-component type is accepted.  Re-registering keeps functions."
+component type is accepted.  PARENT names a catalog this one extends:
+its functions, and renderers, apply here too.  Re-registering keeps
+functions."
   (let ((catalog (gethash name a2ui--catalogs)))
     (if catalog
         (setf (a2ui-catalog-id catalog) id
               (a2ui-catalog-aliases catalog) aliases
               (a2ui-catalog-schema-file catalog) schema
-              (a2ui-catalog-specs catalog) 'unloaded)
+              (a2ui-catalog-parent catalog) parent
+              (a2ui-catalog-specs catalog) 'unloaded
+              (a2ui-catalog-digest-cache catalog) nil)
       (setq catalog (a2ui--catalog-make :name name :id id :aliases aliases
-                                        :schema-file schema))
+                                        :schema-file schema :parent parent))
       (puthash name catalog a2ui--catalogs))
     catalog))
+
+(defun a2ui-catalog-ancestors (catalog)
+  "Return CATALOG followed by the catalogs it extends, nearest first."
+  (let (out)
+    (while catalog
+      (push catalog out)
+      (setq catalog (and (a2ui-catalog-parent catalog)
+                         (a2ui-catalog (a2ui-catalog-parent catalog)))))
+    (nreverse out)))
+
+(defun a2ui-catalog-function (catalog name)
+  "Return function NAME of CATALOG or of a catalog it extends."
+  (seq-some (lambda (c) (gethash name (a2ui-catalog-functions c)))
+            (a2ui-catalog-ancestors catalog)))
 
 (defun a2ui-catalog (name)
   "Return the registered catalog NAME, or signal an error."
@@ -205,6 +226,79 @@ the catalog has no schema."
               specs))))
   (a2ui-catalog-specs catalog))
 
+;;;;; Digest
+
+(defun a2ui--digest-type (schema)
+  "Return a compact type notation for the JSON SCHEMA of a property."
+  (let ((ref (and (hash-table-p schema) (gethash "$ref" schema))))
+    (cond
+     ((not (hash-table-p schema)) "any")
+     ((stringp ref)
+      (pcase (car (last (split-string ref "/")))
+        ("DynamicString" "str") ("DynamicNumber" "num") ("DynamicBoolean" "bool")
+        ("DynamicStringList" "strs") ("DynamicValue" "any") ("DataBinding" "path")
+        ("ComponentId" "id") ("ChildList" "children") ("Action" "action")
+        (other other)))
+     ((gethash "enum" schema) (mapconcat #'a2ui-stringify (gethash "enum" schema) "|"))
+     ((gethash "oneOf" schema)
+      (mapconcat #'a2ui--digest-type (gethash "oneOf" schema) "|"))
+     ((equal (gethash "type" schema) "array")
+      (format "[%s]" (a2ui--digest-type (gethash "items" schema))))
+     ((gethash "properties" schema)
+      (format "{%s}" (a2ui--digest-props schema)))
+     (t (pcase (gethash "type" schema)
+          ("string" "string") ("number" "number") ("integer" "int")
+          ("boolean" "boolean") ("object" "object") (_ "any"))))))
+
+(defun a2ui--digest-props (schema &optional skip)
+  "Return SCHEMA's properties as \"name:type\" pairs, optional ones marked ?.
+Properties named in SKIP are left out."
+  (let (required props)
+    (dolist (part (cons schema (append (gethash "allOf" schema) nil)))
+      (when (hash-table-p part)
+        (setq required (append required (append (gethash "required" part) nil)))
+        (when-let* ((p (gethash "properties" part)))
+          (maphash (lambda (k v) (unless (member k skip) (push (cons k v) props))) p))))
+    (mapconcat (pcase-lambda (`(,k . ,v))
+                 (format "%s%s:%s" k (if (member k required) "" "?") (a2ui--digest-type v)))
+               (nreverse props) " ")))
+
+(defconst a2ui--digest-preamble
+  "Types: str/num/bool/strs/any take a literal, {\"path\":\"/json/pointer\"} or a function call {\"call\",\"args\"}; children is [ids] or {\"path\",\"componentId\"} to repeat a template per list item (paths inside it are relative to the item); action is {\"event\":{\"name\",\"context\":{key: value}}}.  Inputs and Button take checks:[{\"condition\":<bool call>,\"message\"}]; a failing check disables a Button."
+  "How to read a catalog digest, sent once before its components.")
+
+(defun a2ui--digest-functions (schema)
+  "Return the functions of catalog SCHEMA as name(args) words."
+  (let (fns)
+    (maphash (lambda (name s)
+               (let* ((props (and (hash-table-p s) (gethash "properties" s)))
+                      (args (and (hash-table-p props) (gethash "args" props))))
+                 (push (format "%s(%s)" name (if (hash-table-p args) (a2ui--digest-props args) ""))
+                       fns)))
+             (or (gethash "functions" schema) (make-hash-table)))
+    (string-join (nreverse fns) " ")))
+
+(defun a2ui-catalog-digest (catalog)
+  "Return a compact text description of CATALOG for a model's context.
+One line per component and a line of functions, a tenth or so of the
+size of the JSON Schema.  A component schema's `x-a2ui-digest' string,
+when present, replaces its generated line."
+  (or (a2ui-catalog-digest-cache catalog)
+      (setf (a2ui-catalog-digest-cache catalog)
+            (when-let* ((schema (a2ui-catalog-schema catalog)))
+              (let (lines)
+                (maphash (lambda (name s)
+                           (push (or (gethash "x-a2ui-digest" s)
+                                     (format "%s: %s" name
+                                             (a2ui--digest-props
+                                              s '("component" "id" "accessibility" "weight"))))
+                                 lines))
+                         (gethash "components" schema))
+                (concat (format "A2UI v0.9 catalog %s\n" (a2ui-catalog-id catalog))
+                        a2ui--digest-preamble "\n"
+                        (string-join (nreverse lines) "\n") "\n"
+                        "Functions: " (a2ui--digest-functions schema)))))))
+
 ;;;; Functions
 
 (defun a2ui--register-function (catalog name fn)
@@ -239,6 +333,7 @@ surface and scope.  BODY returns the function's JSON result."
 (cl-defstruct (a2ui-session (:constructor a2ui--session-make) (:copier nil))
   "A set of surfaces fed by one transport."
   name
+  directory                                 ; where relative file paths start
   (surfaces (make-hash-table :test 'equal))
   (catalogs (make-hash-table :test 'equal)) ; catalog id -> a2ui-catalog
   send-action-fn                            ; (lambda (message metadata))
@@ -251,14 +346,22 @@ surface and scope.  BODY returns the function's JSON result."
   (data (make-hash-table :test 'equal))
   errors)                               ; errors already reported
 
+(defvar a2ui-default-catalogs '(basic)
+  "Catalog symbols a session supports unless told otherwise.
+Loading a catalog's renderer adds it here, e.g. `a2ui-emacs'.")
+
 (cl-defun a2ui-session-create (&key name send-action-fn on-change-fn
-                                    (catalogs '(basic)))
+                                    (catalogs a2ui-default-catalogs)
+                                    directory)
   "Create a session.
 NAME identifies the agent to the user.  SEND-ACTION-FN is called with
 each outbound message (an action or error envelope) and its metadata.
 ON-CHANGE-FN is called with the id of each surface that changed.
-CATALOGS lists the catalog symbols the session supports."
+CATALOGS lists the catalog symbols the session supports.  DIRECTORY
+is where relative file paths in surfaces start, by default the
+current `default-directory'."
   (let ((session (a2ui--session-make :name name
+                                     :directory (or directory default-directory)
                                      :send-action-fn send-action-fn
                                      :on-change-fn on-change-fn)))
     (dolist (c catalogs)
@@ -270,6 +373,18 @@ CATALOGS lists the catalog symbols the session supports."
 (defun a2ui-session-catalog-list (session)
   "Return the distinct catalogs SESSION supports."
   (delete-dups (hash-table-values (a2ui-session-catalogs session))))
+
+(defun a2ui-session-top-catalogs (session)
+  "Return SESSION's catalogs that no other of its catalogs extends.
+These are the ones worth describing to an agent: the rest are
+contained in them."
+  (let ((all (a2ui-session-catalog-list session)))
+    (seq-remove (lambda (c)
+                  (seq-some (lambda (other)
+                              (and (not (eq other c))
+                                   (memq c (a2ui-catalog-ancestors other))))
+                            all))
+                all)))
 
 (defun a2ui-session-catalog-ids (session)
   "Return SESSION's supported catalog ids, for `supportedCatalogIds'.
@@ -434,7 +549,7 @@ Errors are reported to the agent and yield nil."
 
 (defun a2ui--invoke (surface name args scope)
   "Run function NAME of SURFACE's catalog with resolved ARGS in SCOPE."
-  (let ((fn (gethash name (a2ui-catalog-functions (a2ui-surface-catalog surface)))))
+  (let ((fn (a2ui-catalog-function (a2ui-surface-catalog surface) name)))
     (if (not fn)
         (progn (a2ui--report-error surface "UNKNOWN_FUNCTION"
                                    (format "Function %s is not in this catalog" name))

@@ -3,8 +3,10 @@
 ;; Copyright (C) 2026 Chaz Straney
 
 ;; Author: Chaz Straney <chaz.straney@gmail.com>
+;; Maintainer: Chaz Straney <chaz.straney@gmail.com>
 ;; URL: https://github.com/chazu/a2ui.el
 ;; Keywords: tools, comm
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is not part of GNU Emacs.
 
@@ -78,15 +80,19 @@ forwardedProps.a2uiAction, for agents behind the AG-UI A2UI
 middleware, which turns it into those messages itself."
   :type '(choice (const messages) (const forwarded-props)))
 
-(defcustom a2ui-agui-advertise-schema t
-  "When non-nil, send the catalog's component schema in the run context.
-The agent's model needs it to write valid components, at the cost of
-some tens of kilobytes per run."
-  :type 'boolean)
+(defcustom a2ui-agui-catalog-detail 'digest
+  "How much of the catalog to put in each run's context.
+The agent's model needs it to write valid components.  `digest' sends
+a line per component (`a2ui-catalog-digest'), around 700 tokens for
+the basic catalog; `schema' sends the JSON Schema, several times that,
+as the AG-UI A2UI middleware expects; nil sends only the catalog ids."
+  :type '(choice (const digest) (const schema) (const :tag "Ids only" nil)))
 
-(defcustom a2ui-agui-default-catalog-id a2ui-basic-catalog-id
-  "Catalog id for surfaces created by `render_a2ui' calls without one."
-  :type 'string)
+(defcustom a2ui-agui-default-catalog-id nil
+  "Catalog id for surfaces created by `render_a2ui' calls without one.
+nil means the session's most capable catalog, the Emacs catalog when
+`a2ui-emacs' is loaded."
+  :type '(choice (const :tag "Most capable" nil) string))
 
 (defcustom a2ui-agui-render-retries 2
   "How many times in a row to send failed renders straight back.
@@ -207,11 +213,7 @@ Its session is announced through `a2ui-agui-session-functions'."
 ;;;; RunAgentInput
 
 (defconst a2ui-agui--render-guide
-  "Call render_a2ui to show the user a form or other UI in Emacs instead of asking in prose.
-Arguments: surfaceId (a stable id; reuse it to update a surface), components (a flat array of A2UI v0.9 components; one must have id \"root\"; containers name children by id), and data (the initial data model).
-Each component is {\"id\", \"component\": type, ...props}.  Bind inputs and text to data with {\"path\": \"/pointer\"}.  Give inputs `checks` like {\"condition\": {\"call\": \"required\", \"args\": {\"value\": {\"path\": \"/x\"}}}, \"message\": \"...\"}.
-A Button has a `child` (the id of a Text label) and an `action` {\"event\": {\"name\": \"...\", \"context\": {\"key\": {\"path\": \"/x\"}}}}.
-The tool result only confirms the render.  When the user presses a button you receive a log_a2ui_event tool result naming the action and its resolved context; act on that."
+  "Call render_a2ui to show the user UI in Emacs instead of asking in prose.  Args: surfaceId (reuse it to update that surface), components (flat array of {\"id\",\"component\":Type,...props}; one has id \"root\"; children are named by id; a Button's child is a Text id), data (initial data model; bind with {\"path\":\"/x\"}).  The result only confirms the render; a button press arrives later as a log_a2ui_event tool result with the action name and resolved context."
   "How to use the render tool, sent as run context.")
 
 (defun a2ui-agui--render-tool ()
@@ -230,10 +232,18 @@ The tool result only confirms the render.  When the user presses a button you re
                                         "description" "Initial data model for the surface. Written to the root path."))
              "required" ["surfaceId" "components"])))
 
+(defun a2ui-agui--default-catalog-id (agent)
+  "Return the catalog id `render_a2ui' calls of AGENT default to."
+  (or a2ui-agui-default-catalog-id
+      (a2ui-catalog-id (car (a2ui-session-top-catalogs (a2ui-agui-agent-session agent))))))
+
 (defun a2ui-agui--context (agent)
-  "Return the context entries AGENT sends: catalogs, schema, guide."
+  "Return the context entries AGENT sends: catalogs, guide, components.
+Only catalogs no other one extends are described; the rest are
+inside them.  See `a2ui-agui-catalog-detail'."
   (let* ((session (a2ui-agui-agent-session agent))
-         (catalogs (a2ui-session-catalog-list session)))
+         (top (a2ui-session-top-catalogs session))
+         (catalogs (append top (seq-difference (a2ui-session-catalog-list session) top))))
     (vconcat
      (list (a2ui-obj "description" "A2UI catalog capabilities: available catalog IDs and custom component definitions the client can render."
                      "value" (concat "Available A2UI catalog:\n"
@@ -241,15 +251,20 @@ The tool result only confirms the render.  When the user presses a button you re
                                                 catalogs "\n")))
            (a2ui-obj "description" "A2UI render tool usage guide — how to call render_a2ui with valid arguments."
                      "value" a2ui-agui--render-guide))
-     (when a2ui-agui-advertise-schema
-       (delq nil
-             (mapcar (lambda (c)
-                       (when-let* ((schema (a2ui-catalog-schema c)))
-                         (a2ui-obj "description" "A2UI Component Schema — available components for generating UI surfaces. Use these component names and properties when creating A2UI operations."
-                                   "value" (a2ui-json-encode
-                                            (a2ui-obj "catalogId" (a2ui-catalog-id c)
-                                                      "components" (gethash "components" schema))))))
-                     catalogs))))))
+     (delq nil
+           (mapcar (lambda (c)
+                     (pcase a2ui-agui-catalog-detail
+                       ('digest
+                        (when-let* ((digest (a2ui-catalog-digest c)))
+                          (a2ui-obj "description" "A2UI catalog digest — the components and functions you can use, one per line."
+                                    "value" digest)))
+                       ('schema
+                        (when-let* ((schema (a2ui-catalog-schema c)))
+                          (a2ui-obj "description" "A2UI Component Schema — available components for generating UI surfaces. Use these component names and properties when creating A2UI operations."
+                                    "value" (a2ui-json-encode
+                                             (a2ui-obj "catalogId" (a2ui-catalog-id c)
+                                                       "components" (gethash "components" schema))))))))
+                   top)))))
 
 (defun a2ui-agui--outgoing-messages (agent)
   "Return AGENT's history as sent to the agent: activity messages dropped."
@@ -419,7 +434,7 @@ messages arrays are accepted."
                     (a2ui-obj "version" "v0.9"
                               "createSurface" (a2ui-obj "surfaceId" id
                                                         "catalogId" (or (gethash "catalogId" args)
-                                                                        a2ui-agui-default-catalog-id))))
+                                                                        (a2ui-agui--default-catalog-id agent)))))
                   (a2ui-obj "version" "v0.9"
                             "updateComponents" (a2ui-obj "surfaceId" id
                                                          "components" (or (gethash "components" args) [])))
@@ -689,8 +704,8 @@ events in order, and REST is the unfinished tail to pass as PENDING
 next time.  Comments and fields other than `data' are ignored; an
 event's `data' lines are joined with newlines."
   (let ((text (string-replace "\r" "" (concat pending chunk)))
-        (start 0) events)
-    (while-let ((end (string-search "\n\n" text start)))
+        (start 0) end events)
+    (while (setq end (string-search "\n\n" text start))
       (let (data)
         (dolist (line (split-string (substring text start end) "\n"))
           (when (string-prefix-p "data:" line)

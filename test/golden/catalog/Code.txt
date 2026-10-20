@@ -1,0 +1,7 @@
+=== s
+def deploy(n):
+    return n * 2  # replicas
+(defun hello () "Say hi." (message "hi"))
+plain text
+--- faces
+

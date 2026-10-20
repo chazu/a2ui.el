@@ -1,0 +1,8 @@
+=== s
+* Release notes
+Ships three new components, see a2ui-emacs.el.
+- Table
+- Diff
+Project page
+--- faces
+

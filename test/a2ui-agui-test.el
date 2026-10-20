@@ -46,7 +46,7 @@ fixture files FIXTURES, fed in small chunks."
             (a2ui-agui-session-functions nil)
             (a2ui-agui-text-functions nil)
             (a2ui-message-functions nil)
-            (a2ui-agui-advertise-schema nil)
+            (a2ui-agui-catalog-detail nil)
             (a2ui-agui-post-function
              (lambda (agent body)
                (push (a2ui-json-parse body) a2ui-agui-test--inputs)
@@ -99,8 +99,9 @@ fixture files FIXTURES, fed in small chunks."
       (should (equal (gethash "protocolVersion" input) "1.0"))
       (should (equal (a2ui-agui-test--roles input) '("user")))
       (should (equal (gethash "name" (aref (gethash "tools" input) 0)) "render_a2ui"))
-      (should (string-match-p "Available A2UI catalog:\n- https://a2ui.org"
-                              (gethash "value" (aref (gethash "context" input) 0))))
+      (let ((catalogs (gethash "value" (aref (gethash "context" input) 0))))
+        (should (string-prefix-p "Available A2UI catalog:\n- " catalogs))
+        (should (string-search a2ui-basic-catalog-id catalogs)))
       (should (eq (gethash "a2uiCatalogAvailable" (gethash "forwardedProps" input)) t))
       ;; What came back: text, a rendered surface, a pending call.
       (should surface)
@@ -338,7 +339,7 @@ fixture files FIXTURES, fed in small chunks."
          (a2ui-agui-session-functions nil)
          (a2ui-agui-text-functions nil)
          (a2ui-message-functions nil)
-         (a2ui-agui-advertise-schema nil))
+         (a2ui-agui-catalog-detail nil))
     (unwind-protect
         (progn
           (with-temp-file script
@@ -374,7 +375,7 @@ fixture files FIXTURES, fed in small chunks."
          (a2ui-agui-curl-program script)
          (a2ui-agui-session-functions nil)
          (a2ui-agui-text-functions nil)
-         (a2ui-agui-advertise-schema nil)
+         (a2ui-agui-catalog-detail nil)
          (said nil))
     (unwind-protect
         (progn

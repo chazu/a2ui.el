@@ -1,0 +1,3 @@
+{"version": "v0.9", "createSurface": {"surfaceId": "s", "catalogId": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s", "components": [{"id": "root", "component": "Column", "children": ["env", "none"]}, {"id": "env", "component": "Picker", "label": "Environment", "options": {"path": "/envs"}, "value": {"path": "/env"}}, {"id": "none", "component": "Picker", "label": "Region", "options": [{"label": "Europe", "value": "eu"}, {"label": "US", "value": "us"}], "value": {"path": "/region"}}]}}
+{"version": "v0.9", "updateDataModel": {"surfaceId": "s", "value": {"envs": ["staging", "prod"], "env": "staging"}}}

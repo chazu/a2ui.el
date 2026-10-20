@@ -75,11 +75,12 @@
   (let ((messages (a2ui-read-jsonl (expand-file-name (concat "fixtures/" file) a2ui-vui-test--dir))))
     (a2ui-vui-test--replay session (if drop-last (butlast messages) messages))))
 
-(defun a2ui-vui-test--surface-messages (components &optional data)
-  "Return messages creating surface \"s\" with COMPONENTS and DATA (JSON)."
+(defun a2ui-vui-test--surface-messages (components &optional data catalog-id)
+  "Return messages creating surface \"s\" with COMPONENTS and DATA (JSON).
+CATALOG-ID defaults to the basic catalog."
   (delq nil
         (list (format "{\"version\":\"v0.9\",\"createSurface\":{\"surfaceId\":\"s\",\"catalogId\":%S}}"
-                      a2ui-basic-catalog-id)
+                      (or catalog-id a2ui-basic-catalog-id))
               (format "{\"version\":\"v0.9\",\"updateComponents\":{\"surfaceId\":\"s\",\"components\":%s}}"
                       components)
               (and data (format "{\"version\":\"v0.9\",\"updateDataModel\":{\"surfaceId\":\"s\",\"value\":%s}}"

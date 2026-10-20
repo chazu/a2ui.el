@@ -1,0 +1,2 @@
+(a2ui :fetcher github :repo "chazu/a2ui.el"
+      :files (:defaults "catalogs"))

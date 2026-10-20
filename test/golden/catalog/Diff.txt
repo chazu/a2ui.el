@@ -1,0 +1,13 @@
+=== s
+values.yaml
+--- a/values.yaml
++++ b/values.yaml
+@@ -1,4 +1,4 @@
+ service: billing
+-replicas: 3
++replicas: 5
+ image: billing:1.8
+[Accept]  [Reject]
+--- faces
+a2ui-emacs-file: values.yaml
+a2ui-button-primary: [Accept]

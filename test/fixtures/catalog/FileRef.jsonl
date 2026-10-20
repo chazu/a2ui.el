@@ -1,0 +1,2 @@
+{"version": "v0.9", "createSurface": {"surfaceId": "s", "catalogId": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s", "components": [{"id": "root", "component": "Column", "children": ["line", "plain", "labelled"]}, {"id": "line", "component": "FileRef", "path": "a2ui-core.el", "line": 42}, {"id": "plain", "component": "FileRef", "path": "README.md"}, {"id": "labelled", "component": "FileRef", "path": "DESIGN.md", "label": "The design"}]}}

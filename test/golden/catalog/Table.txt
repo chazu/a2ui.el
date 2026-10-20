@@ -1,0 +1,11 @@
+=== s
+Service Replicas
+billing        3
+search        12
+    Service Env
+[ ] billing prod
+[X] search  staging
+--- faces
+a2ui-link: billing
+a2ui-emacs-selected: search
+a2ui-emacs-selected: staging

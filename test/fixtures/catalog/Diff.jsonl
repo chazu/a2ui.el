@@ -1,0 +1,3 @@
+{"version": "v0.9", "createSurface": {"surfaceId": "s", "catalogId": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s", "components": [{"id": "root", "component": "Diff", "file": "values.yaml", "diff": {"path": "/plan"}, "acceptAction": {"event": {"name": "apply"}}, "rejectAction": {"event": {"name": "discard"}}}]}}
+{"version": "v0.9", "updateDataModel": {"surfaceId": "s", "value": {"plan": "--- a/values.yaml\n+++ b/values.yaml\n@@ -1,4 +1,4 @@\n service: billing\n-replicas: 3\n+replicas: 5\n image: billing:1.8\n"}}}
