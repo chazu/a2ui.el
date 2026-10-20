@@ -79,7 +79,7 @@ Every host gets the same four tools:
 | `a2ui_catalog` | The compact component list, or the full schema of named components |
 | `a2ui_await_action` | Wait for the user's next button press |
 
-Surfaces open in their own buffers (see `display-buffer-alist` under [Configuration](#configuration)), or inside the gptel chat or agent-shell buffer with the inline options below. A button press reaches the model in one of two ways:
+Surfaces open in their own buffers, or inside the gptel chat or agent-shell buffer (see [Where surfaces appear](#where-surfaces-appear)). A button press reaches the model in one of two ways:
 - as the result of a pending `a2ui_await_action`, when the model is waiting;
 - otherwise as your next message, in hosts that take messages (gptel, agent-shell).
 
@@ -188,6 +188,28 @@ The `drive-*.el` files next to them play the user in batch Emacs against each ho
 - `drive-agent-shell.el` for agent-shell
 - `drive-mcp.el` for Claude Code or Codex in a terminal
 - `drive-deploy.el` and `drive-catalog.el` for AG-UI agents
+
+## Where surfaces appear
+
+**In a window of their own (the default).** Each new surface gets a buffer named `*a2ui: SURFACE-ID*`, shown with `display-buffer`, so `display-buffer-alist` decides where it goes: a side window, another frame, the selected window. This is the same for every host: gptel, agent-shell, Claude Code or Codex in a terminal, and AG-UI agents. `a2ui-list-surfaces` brings back one you closed. With `a2ui-vui-auto-show` set to nil, new surfaces aren't shown anywhere until you open them from that list.
+
+**Inside the conversation.** Two options draw surfaces in the chat itself instead:
+
+| Option | Where the surface appears |
+|---|---|
+| `a2ui-gptel-inline-surfaces` | In the gptel chat buffer, below the response that drew it, once that response is done. gptel leaves it out of what it sends. If the model waits in `a2ui_await_action` instead of ending its response, the surface opens in its own buffer, since the chat can't change mid-response. |
+| `a2ui-agent-shell-inline-surfaces` | In the agent-shell buffer, above the prompt, when the agent's turn ends. |
+
+```elisp
+(setq a2ui-gptel-inline-surfaces t
+      a2ui-agent-shell-inline-surfaces t)
+```
+
+An inline surface is as live as one in its own buffer: fields, buttons and data updates work, and the text around it stays editable. A surface can show in both places at once, and the copies stay in sync.
+
+**Modals** always open their content in a popup window, `*a2ui: SURFACE-ID/MODAL-ID*`, wherever the surface itself is. `a2ui-vui-modal-display-action` says how the popup is displayed.
+
+**Anywhere else.** A session's `display-fn`, called with the id of each new surface, decides where it goes; the inline options above are built on it. `a2ui-vui-insert-surface` draws a live surface at a position in any buffer (see [For package authors](#for-package-authors)).
 
 ## Configuration
 
