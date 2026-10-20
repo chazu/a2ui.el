@@ -7,28 +7,9 @@ Let AI agents draw native, interactive UI in Emacs: forms, tables, diffs and pic
 
 [A2UI](https://a2ui.org) is a protocol in which an agent describes UI as JSON (components, a data model, actions) instead of writing code. a2ui.el renders those surfaces with [vui.el](https://github.com/d12frosted/vui.el). You fill them in with normal editing keys, and the agent gets your answers when you press a button. Nothing the agent sends is ever evaluated as code.
 
-```
-Review: tidy a2ui-vui docstrings
-Rewords one docstring.  No behaviour change.
-▾ Files (2)
-  File        + -
-  a2ui-vui.el 1 1
-  DESIGN.md   4 0
-a2ui-vui.el
---- a/a2ui-vui.el
-+++ b/a2ui-vui.el
-@@ -44,3 +44,3 @@
- (defcustom a2ui-vui-width 60
--  "Width of rules."
-+  "Width in characters of rules drawn by Card and Divider."
-   :type 'natnum
-[Accept]  [Reject]
-▸ Context
-Reviewer: [Select...]
-[Merge]
-```
+![An agent's review surface in Emacs: a blocked Merge, a folded section, a picker, then the action sent](docs/demo.gif)
 
-*The `examples/code-review.jsonl` surface. Section, Table, Diff, Picker and OrgText are from the Emacs catalog. Faces come from your theme and `diff-mode`.*
+*The `examples/code-review.jsonl` surface, driven by `scripts/demo-gif.el`. Section, Table, Diff, Picker and OrgText are from the Emacs catalog. In Emacs, faces come from your theme and `diff-mode`.*
 
 ## Features
 
@@ -329,6 +310,7 @@ A2UI_UPDATE_GOLDEN=1 eldev test    # rewrite render snapshots after a deliberate
 eldev lint && eldev lint doc       # package-lint and checkdoc
 eldev compile --warnings-as-errors
 python3 scripts/build-emacs-catalog.py   # regenerate catalogs/emacs/catalog.json
+eldev -p emacs --batch -l scripts/demo-gif.el -f a2ui-demo-gif-frames && python3 scripts/demo-gif.py   # docs/demo.gif
 ```
 
 `benchmarks/a2ui-bench.el` times rendering and typing into large surfaces. The `examples/agents/drive-*.el` files play the user against live agents in batch Emacs. `drive-gptel.el` takes `A2UI_GPTEL_BACKEND` (`ollama` or `openrouter`), `A2UI_GPTEL_MODEL` and `A2UI_GPTEL_CHAT`; `drive-agent-shell.el` takes `A2UI_PROMPT`.
