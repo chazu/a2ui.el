@@ -180,10 +180,10 @@ v0.1 ships two catalogs: most of the A2UI basic catalog, so existing agents work
 | ChoicePicker | `vui-select` (single) or checkboxes (multi) | Yes |
 | Slider | Numeric field with `-` / `+` keys, range from props | Yes |
 | DateTimeInput | Field that opens `org-read-date` | Yes |
-| Tabs | Tab titles as buttons; only the selected child rendered | Later |
-| Modal | Child surface in a popup window | Later |
+| Tabs | Tab titles as buttons; only the selected child rendered | Yes |
+| Modal | Child surface in a popup window | Yes |
 | Icon | A small glyph table, else the icon name in brackets | Yes |
-| Image | Inline image when `display-images-p` and URL is fetchable; else a link | Later |
+| Image | Inline image when `display-images-p` and URL is fetchable; else a link | Yes |
 | Video, AudioPlayer | Link opened with `browse-url` | Yes (as links) |
 
 **Emacs catalog** (`https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1`)
@@ -417,3 +417,17 @@ Host integrations (after milestone 4):
 - **MCP** (`a2ui-mcp.el`): a Streamable-HTTP MCP server on 127.0.0.1 with plain JSON responses, one endpoint per host (`/mcp/TOKEN`), Origin checked against DNS rebinding. Because Emacs owns the socket, a2ui_await_action holds its HTTP response until the user acts, which is how a terminal agent learns of presses. Verified live with Claude Code 2.1 (`claude -p --mcp-config`) and Codex 0.163 (`codex exec`; it needs `default_tools_approval_mode = "approve"` since exec never prompts).
 - **agent-shell** (`a2ui-agent-shell.el`): an `agent-shell-mcp-servers` entry whose url lambda (run in the shell buffer when it starts) makes that shell's host and endpoint; presses become the shell's next prompt via `agent-shell-insert`, or its prompt queue when busy. A permission responder approves `mcp__a2ui__*` tools only, chained before any existing one. Verified live in batch Emacs: a real agent-shell running claude-agent-acp drew the surface, the Approve press arrived as a prompt, Claude answered. Codex through agent-shell's codex-acp is expected to work the same way but was not run.
 - **Repairs.** Models, small ones especially, wrap props in a `props` object and write children inline; `a2ui-tools-normalize-components` hoists them into the flat list before validation.
+
+Completing the design (after host integrations):
+
+- **Tabs** keep the selected tab as view state, like a Section without a binding, so switching sends nothing; titles are buttons and `<left>`/`<right>` on a title step through them. View state moved from `a2ui-emacs` into the renderer (`a2ui-vui-local`).
+- **Modal.** Any Button that is some Modal's `trigger` opens that Modal's content in a popup buffer (`*a2ui: SURFACE/MODAL*`, shown with `a2ui-vui-modal-display-action`); the press sends nothing, since the agent didn't ask to hear about it. The spec's movie card lists the trigger in its content *and* in the Modal, so a Modal draws its trigger only when no other component shows it; a trigger that isn't a Button gets an `[Open]` button beside it. The popup re-renders with the surface and edits in it write the same data model. Both are now in the Emacs catalog, with digest lines saying how they behave.
+- **Images** show inline in graphical frames: `data:` URLs at once, http(s) images after a `show` button asks (or at once with `a2ui-vui-inline-images` t, or for hosts in `a2ui-vui-image-hosts`). Fetches are async, capped at `a2ui-vui-image-max-bytes`, cached by URL, and must decode as an image; anything else stays a link.
+- **`a2ui-list-surfaces`** lists the live surfaces of every session the renderer knows. Deleting a surface (there or with `C-c C-k`) now ends any `a2ui_await_action` waiting on it with `{"status":"closed"}`, which is how a tool host's agent is told; AG-UI has no message for it.
+- **Stricter validation, from live runs.** Through OpenRouter, Qwen3-Coder wrote `"action": {"event": "decide"}` and `{"bind": "/reason"}`. Both passed validation and gave a button that did nothing, or sent `{"bind": …}` as the value. Action-typed props are now checked (`event.name` a string, `context` an object of dynamic values; or `functionCall.call`), and so is every `Dynamic*` prop: an object must be `{path}` or `{call}`. With those errors Qwen fixes its surface and completes the round trip.
+- **gptel details.** gptel marks every object argument `additionalProperties: false`, which would forbid any key in `render_a2ui`'s free-form `data`. The gptel adapter passes such arguments as JSON text and parses them back. gptel also has no open request while tools run, so "busy" now checks `gptel--fsm-last` as well. Otherwise a press during a tool call could start a second request. `a2ui_await_action` returns at once, rather than waiting out its timeout, for a surface that doesn't exist or whose last render failed. A model that calls render and await together in one turn then learns of the failure.
+- **Live results.**
+  - gptel via OpenRouter: Claude Haiku 5.5 passed on both paths, carrying the bound reason. Qwen3-Coder passed after self-correcting. GPT-4o-mini finished one run in two.
+  - agent-shell with Claude Code: the earlier review prompt passed again. A release review asking for tabs and a rollback Modal got Tabs, Modal, Table, Diff and OrgText, valid on the first try, and the Approve press came back as the next prompt.
+- **Still open:** inline surfaces at a marker inside agent-shell or gptel transcripts. vui mounts a component tree into a whole buffer, so it needs region mounting first. Also open: the demo GIF, which needs a graphical session, and MELPA submission once the repository is public.
+

@@ -3,7 +3,7 @@
 
 The Emacs catalog is a superset, so a surface can mix Text and Button
 with Diff and Table under one catalogId.  Basic components the renderer
-cannot draw yet (Tabs, Modal) are left out until it can.
+cannot draw are left out until it can (none at present).
 
     python3 scripts/build-emacs-catalog.py
 """
@@ -15,7 +15,12 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CATALOG_ID = "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1"
 COMMON = "https://a2ui.org/specification/v0_9/common_types.json#/$defs/"
-UNSUPPORTED = {"Tabs", "Modal"}
+UNSUPPORTED = set()
+# How the basic components that act differently in Emacs behave.
+BASIC_DIGESTS = {
+    "Tabs": "Tabs: tabs:[{title:str child:id}]  (only the selected tab's child is shown; switching tabs sends nothing)",
+    "Modal": "Modal: trigger:id content:id  (trigger, usually a Button, opens content in a popup window; that press sends nothing)",
+}
 
 
 def ref(name, description=None):
@@ -111,11 +116,13 @@ catalog = copy.deepcopy(basic)
 catalog["$id"] = CATALOG_ID
 catalog["catalogId"] = CATALOG_ID
 catalog["title"] = "a2ui.el Emacs catalog"
-catalog["description"] = ("The A2UI v0.9 basic catalog (less Tabs and Modal) plus Emacs components: "
+catalog["description"] = ("The A2UI v0.9 basic catalog plus Emacs components: "
                           "Section, Table, Diff, Code, Picker, FileRef and OrgText.  Prefer them to "
                           "building the same thing from Rows and Text.")
 for name in UNSUPPORTED:
     catalog["components"].pop(name, None)
+for name, digest in BASIC_DIGESTS.items():
+    catalog["components"][name]["x-a2ui-digest"] = digest
 catalog["components"].update(EMACS)
 any_component = catalog["$defs"].get("anyComponent")
 if isinstance(any_component, dict) and "oneOf" in any_component:

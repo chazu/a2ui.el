@@ -1,0 +1,9 @@
+=== s
+[Overview] [Details] [Log]
+────────────────────────────────────────────────────────────
+The first tab is selected at first.
+--- faces
+a2ui-tab-selected: [Overview]
+a2ui-tab: [Details]
+a2ui-tab: [Log]
+a2ui-rule: ────────────────────────────────────────────────────────────

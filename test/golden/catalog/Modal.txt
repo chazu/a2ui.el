@@ -1,0 +1,6 @@
+=== s
+Settings
+[Edit name]
+What is this? [Open]
+--- faces
+a2ui-heading-3: Settings

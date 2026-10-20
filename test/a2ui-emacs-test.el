@@ -130,14 +130,15 @@
     (setf (a2ui-session-send-action-fn session) (lambda (m _) (push m sent)))
     (a2ui-apply-message session (format "{\"version\":\"v0.9\",\"createSurface\":{\"surfaceId\":\"s\",\"catalogId\":%S}}"
                                         a2ui-emacs-catalog-id))
-    (a2ui-apply-message session "{\"version\":\"v0.9\",\"updateComponents\":{\"surfaceId\":\"s\",\"components\":[{\"id\":\"root\",\"component\":\"Text\",\"text\":{\"call\":\"formatString\",\"args\":{\"value\":\"n=${/n}\"}}},{\"id\":\"t\",\"component\":\"Tabs\",\"tabs\":[]},{\"id\":\"d\",\"component\":\"Diff\",\"diff\":\"\"}]}}")
+    (a2ui-apply-message session "{\"version\":\"v0.9\",\"updateComponents\":{\"surfaceId\":\"s\",\"components\":[{\"id\":\"root\",\"component\":\"Text\",\"text\":{\"call\":\"formatString\",\"args\":{\"value\":\"n=${/n}\"}}},{\"id\":\"t\",\"component\":\"Tabs\",\"tabs\":[{\"title\":\"A\",\"child\":\"d\"}]},{\"id\":\"d\",\"component\":\"Diff\",\"diff\":\"\"},{\"id\":\"b\",\"component\":\"Blink\"}]}}")
     (let ((surface (a2ui-session-surface session "s")))
-      ;; Basic components and functions work; Tabs is not offered.
+      ;; Basic components and functions work beside the Emacs ones.
       (a2ui-set surface "/n" 3)
       (should (equal (a2ui-resolve-prop (a2ui-surface-component surface "root") "text" surface) "n=3"))
       (should (a2ui-surface-component surface "d"))
-      (should-not (a2ui-surface-component surface "t"))
-      (should (string-match-p "Unknown component type Tabs"
+      (should (a2ui-surface-component surface "t"))
+      (should-not (a2ui-surface-component surface "b"))
+      (should (string-match-p "Unknown component type Blink"
                               (gethash "message" (gethash "error" (car sent))))))))
 
 (ert-deftest a2ui-emacs-digest ()
@@ -145,7 +146,8 @@
         (emacs (a2ui-catalog-digest (a2ui-catalog 'emacs))))
     (should (string-match-p "^Table: columns:" emacs))
     (should (string-match-p "^TextField: label:str" emacs))
-    (should-not (string-match-p "^Tabs:" emacs))
+    (should (string-match-p "^Tabs: tabs:\\[{title:str child:id}]  (only the selected" emacs))
+    (should (string-match-p "^Modal: trigger:id content:id  (" emacs))
     (should (string-match-p "^Functions: required(value:any)" emacs))
     ;; A digest is several times smaller than the schema it describes.
     (dolist (c '(basic emacs))

@@ -230,14 +230,19 @@ The golden file holds each surface's text and the a2ui faces in it."
     (a2ui-vui-test--settle buffer)
     (should (equal (a2ui-vui-test--text buffer) "hello"))))
 
+(a2ui-register-catalog 'a2ui-vui-test-open :id "urn:a2ui-vui-test:open" :parent 'basic)
+
 (ert-deftest a2ui-vui-unsupported-and-cycles ()
-  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
-                                                (concat "[{\"id\":\"root\",\"component\":\"Column\",\"children\":[\"tabs\",\"loop\"]},"
-                                                        "{\"id\":\"tabs\",\"component\":\"Tabs\",\"tabs\":[{\"title\":\"A\",\"child\":\"loop\"}]},"
-                                                        "{\"id\":\"loop\",\"component\":\"Column\",\"children\":[\"loop\"]}]")))
-    (should (equal (a2ui-vui-test--text buffer) "[unsupported: Tabs]\n[cycle: loop]"))
-    (should (seq-some (lambda (e) (equal (gethash "code" e) "VALIDATION_FAILED"))
-                      (a2ui-vui-test--errors)))))
+  ;; A catalog without a schema accepts any type, so one may lack a renderer.
+  (let ((a2ui-default-catalogs '(basic a2ui-vui-test-open)))
+    (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
+                                                  (concat "[{\"id\":\"root\",\"component\":\"Column\",\"children\":[\"blink\",\"loop\"]},"
+                                                          "{\"id\":\"blink\",\"component\":\"Blink\"},"
+                                                          "{\"id\":\"loop\",\"component\":\"Column\",\"children\":[\"loop\"]}]")
+                                                  nil "urn:a2ui-vui-test:open"))
+      (should (equal (a2ui-vui-test--text buffer) "[unsupported: Blink]\n[cycle: loop]"))
+      (should (seq-some (lambda (e) (equal (gethash "code" e) "VALIDATION_FAILED"))
+                        (a2ui-vui-test--errors))))))
 
 (ert-deftest a2ui-vui-template-relative-scopes ()
   (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
@@ -336,6 +341,99 @@ The golden file holds each surface's text and the a2ui faces in it."
     (let ((buffer (a2ui-vui-test--buffer session "contact_form_1")))
       (should (string-match-p "Contact Us" (a2ui-vui-test--text buffer)))
       (kill-buffer buffer))))
+
+(ert-deftest a2ui-vui-list-surfaces ()
+  (let* ((a2ui-log-messages nil)
+         (session (a2ui-replay-file (expand-file-name "../examples/contact-form.jsonl" a2ui-vui-test--dir)))
+         (buffer (a2ui-vui-test--buffer session "contact_form_1")))
+    (unwind-protect
+        (save-window-excursion
+          (a2ui-list-surfaces)
+          (with-current-buffer "*a2ui surfaces*"
+            ;; Other tests' sessions may be listed too; find this one's row.
+            (goto-char (point-min))
+            (while (and (not (eobp)) (not (eq (car (tabulated-list-get-id)) session)))
+              (forward-line))
+            (should (eq (cdr (tabulated-list-get-id))
+                        (a2ui-session-surface session "contact_form_1")))
+            (should (string-match-p "replay:contact-form.jsonl +contact_form_1"
+                                    (buffer-substring (line-beginning-position) (line-end-position))))
+            (cl-letf (((symbol-function 'yes-or-no-p) #'always))
+              (a2ui-surface-list-delete))
+            (should-not (a2ui-session-surface session "contact_form_1"))
+            (should-not (buffer-live-p buffer))
+            (should-not (seq-find (lambda (e) (eq (car (car e)) session)) (a2ui--surface-list-entries)))))
+      (when (buffer-live-p buffer) (kill-buffer buffer))
+      (kill-buffer "*a2ui surfaces*"))))
+
+;;;; Interaction: Tabs and Modal
+
+(ert-deftest a2ui-vui-tabs-switch ()
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--catalog "Tabs"))
+    (should (string-match-p "first tab is selected" (a2ui-vui-test--text buffer)))
+    (should-not (string-match-p "Name: Ada" (a2ui-vui-test--text buffer)))
+    ;; RET on a title shows its child; the title came from the data.
+    (a2ui-vui-test--press "root@/tab/1")
+    (a2ui-vui-test--settle buffer)
+    (should (string-match-p "Details" (a2ui-vui-test--text buffer)))
+    (should (string-match-p "Name: Ada" (a2ui-vui-test--text buffer)))
+    (should-not (string-match-p "first tab" (a2ui-vui-test--text buffer)))
+    (should (eq (get-text-property (progn (vui-goto-key "root@/tab/1") (point)) 'face) 'a2ui-tab-selected))
+    ;; Right arrow moves on, wrapping at the end.
+    (vui-goto-key "root@/tab/1")
+    (call-interactively (keymap-lookup (get-char-property (point) 'keymap) "<right>"))
+    (a2ui-vui-test--settle buffer)
+    (should (string-match-p "Only one tab" (a2ui-vui-test--text buffer)))
+    (vui-goto-key "root@/tab/2")
+    (call-interactively (keymap-lookup (get-char-property (point) 'keymap) "<right>"))
+    (a2ui-vui-test--settle buffer)
+    (should (string-match-p "first tab" (a2ui-vui-test--text buffer)))
+    ;; Switching tabs is view state: nothing goes to the agent.
+    (should-not (a2ui-vui-test--actions))))
+
+(ert-deftest a2ui-vui-modal-opens-and-binds ()
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--catalog "Modal"))
+    (should-not (string-match-p "Name: Ada" (a2ui-vui-test--text buffer)))
+    (save-window-excursion
+      (a2ui-vui-test--press "open@")
+      ;; The trigger opens the modal and sends nothing.
+      (should-not (a2ui-vui-test--actions))
+      (let ((modal (get-buffer "*a2ui: s/modal*")))
+        (unwind-protect
+            (progn
+              (should (buffer-live-p modal))
+              (should (eq (window-buffer) modal))
+              (a2ui-vui-test--settle modal)
+              (should (string-match-p "Name: Ada" (a2ui-vui-test--text modal)))
+              (with-current-buffer modal
+                (should a2ui-modal-mode)
+                (a2ui-vui-test--type "name@" "Grace")
+                (should (equal (a2ui-get (a2ui-session-surface session "s") "/name") "Grace"))
+                (a2ui-vui-test--press "save@"))
+              (let ((action (car (a2ui-vui-test--actions))))
+                (should (equal (gethash "name" action) "save"))
+                (should (equal (gethash "name" (gethash "context" action)) "Grace")))
+              ;; An agent's update shows in the open modal.
+              (a2ui-apply-message session "{\"version\":\"v0.9\",\"updateComponents\":{\"surfaceId\":\"s\",\"components\":[{\"id\":\"save_l\",\"component\":\"Text\",\"text\":\"Saved\"}]}}")
+              (a2ui-vui-test--settle modal)
+              (should (string-match-p "Saved" (a2ui-vui-test--text modal)))
+              ;; So does the surface going away.
+              (a2ui-delete-surface session "s")
+              (a2ui-vui-test--settle modal)
+              (should (string-match-p "Surface s was deleted" (a2ui-vui-test--text modal))))
+          (when (buffer-live-p modal) (kill-buffer modal)))))))
+
+(ert-deftest a2ui-vui-modal-other-trigger ()
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--catalog "Modal"))
+    (save-window-excursion
+      (a2ui-vui-test--press "other@/open")
+      (let ((modal (get-buffer "*a2ui: s/other*")))
+        (unwind-protect
+            (progn (a2ui-vui-test--settle modal)
+                   (should (string-match-p "not a Button" (a2ui-vui-test--text modal)))
+                   (with-current-buffer modal (a2ui-modal-close))
+                   (should-not (buffer-live-p modal)))
+          (when (buffer-live-p modal) (kill-buffer modal)))))))
 
 ;;;; Interaction: checks
 
@@ -487,6 +585,73 @@ The golden file holds each surface's text and the a2ui faces in it."
         (a2ui-vui-test--press "v@"))
       (should (string-match-p "example.com/clip.mp4" asked))
       (should (equal opened "https://example.com/clip.mp4")))))
+
+;;;; Images
+
+(defconst a2ui-vui-test--png "\x89PNG\r\n\x1a\n\0\0\0\rIHDR"
+  "The start of a PNG file, enough for `image-type-from-data'.")
+
+(defmacro a2ui-vui-test--with-images (&rest body)
+  "Run BODY as if in a frame that shows images."
+  `(cl-letf (((symbol-function 'display-images-p) #'always)
+             ((symbol-function 'create-image)
+              (lambda (data &rest _) (list 'image :type 'png :data data))))
+     (clrhash a2ui-vui--images)
+     ,@body))
+
+(defun a2ui-vui-test--image-surface (url)
+  "Return messages for a surface showing an Image of URL."
+  (a2ui-vui-test--surface-messages
+   (format "[{\"id\":\"root\",\"component\":\"Image\",\"url\":%S,\"description\":\"Logo\"}]" url)))
+
+(defun a2ui-vui-test--image-at-point-min ()
+  "Return the image displayed at the start of the buffer, or nil."
+  (let ((display (get-text-property (point-min) 'display)))
+    (and (eq (car-safe display) 'image) display)))
+
+(ert-deftest a2ui-vui-image-data-url ()
+  (a2ui-vui-test--with-images
+   (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--image-surface
+                                                 (concat "data:image/png;base64," (base64-encode-string a2ui-vui-test--png))))
+     (should (equal (plist-get (cdr (a2ui-vui-test--image-at-point-min)) :data) a2ui-vui-test--png)))))
+
+(ert-deftest a2ui-vui-image-asks-before-fetching ()
+  (a2ui-vui-test--with-images
+   (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--image-surface "https://example.com/logo.png"))
+     (should (equal (a2ui-vui-test--text buffer) "▣ Logo [show]"))
+     (should-not (a2ui-vui-test--image-at-point-min))
+     (let ((fetched nil) (asked nil))
+       (cl-letf (((symbol-function 'y-or-n-p) (lambda (prompt) (setq asked prompt) t))
+                 ((symbol-function 'url-retrieve)
+                  (lambda (url callback &rest _)
+                    (setq fetched url)
+                    (with-current-buffer (generate-new-buffer " *http*")
+                      (insert "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\n\r\n" a2ui-vui-test--png)
+                      (funcall callback nil)))))
+         (a2ui-vui-test--press "root@/show"))
+       (should (string-match-p "example.com/logo.png" asked))
+       (should (equal fetched "https://example.com/logo.png"))
+       (a2ui-vui-test--settle buffer)
+       (should (equal (plist-get (cdr (a2ui-vui-test--image-at-point-min)) :data) a2ui-vui-test--png))))))
+
+(ert-deftest a2ui-vui-image-allowed-host-and-links ()
+  (a2ui-vui-test--with-images
+   ;; An allowed host is fetched without asking; a failure leaves the link.
+   (let ((a2ui-vui-image-hosts '("img.example.com"))
+         (fetched nil))
+     (cl-letf (((symbol-function 'url-retrieve)
+                (lambda (url callback &rest _)
+                  (setq fetched url)
+                  (with-current-buffer (generate-new-buffer " *http*")
+                    (funcall callback '(:error (error http 404)))))))
+       (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--image-surface "https://img.example.com/a.png"))
+         (a2ui-vui-test--settle buffer)
+         (should (equal fetched "https://img.example.com/a.png"))
+         (should (equal (a2ui-vui-test--text buffer) "▣ Logo")))))
+   ;; With inline images off, only the link.
+   (let ((a2ui-vui-inline-images nil))
+     (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--image-surface "https://example.com/logo.png"))
+       (should (equal (a2ui-vui-test--text buffer) "▣ Logo"))))))
 
 (provide 'a2ui-vui-test)
 ;;; a2ui-vui-test.el ends here

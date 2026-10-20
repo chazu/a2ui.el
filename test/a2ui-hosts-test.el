@@ -16,6 +16,7 @@
 
 (defvar agent-shell-mcp-servers)
 (defvar agent-shell-permission-responder-function)
+(defvar gptel--fsm-last)
 
 (defun a2ui-hosts-test--host (&optional deliver)
   "Return a host, without a renderer, that delivers with DELIVER."
@@ -60,6 +61,44 @@
     (should (equal (gethash "status" result) "invalid"))
     (should (string-match-p "Unknown component type Blink" (aref (gethash "errors" result) 0)))
     (should (string-match-p "a2ui_catalog" (gethash "hint" result)))))
+
+(ert-deftest a2ui-hosts-render-bad-action ()
+  ;; A string event is a common slip; the button could never fire.
+  (let* ((host (a2ui-hosts-test--host))
+         (result (a2ui-json-parse
+                  (a2ui-hosts-test--call
+                   host "render_a2ui"
+                   "{\"surfaceId\":\"c\",\"components\":[{\"id\":\"root\",\"component\":\"Button\",\"child\":\"l\",\"action\":{\"event\":\"decide\"}},{\"id\":\"l\",\"component\":\"Text\",\"text\":\"Go\"}]}"))))
+    (should (equal (gethash "status" result) "invalid"))
+    (should (string-match-p "/action: Expected an action like {\"event\": {\"name\""
+                            (aref (gethash "errors" result) 0)))))
+
+(ert-deftest a2ui-hosts-render-bad-binding ()
+  ;; Only {path} and {call} objects are dynamic values.
+  (let* ((host (a2ui-hosts-test--host))
+         (result (a2ui-json-parse
+                  (a2ui-hosts-test--call
+                   host "render_a2ui"
+                   "{\"surfaceId\":\"c\",\"components\":[{\"id\":\"root\",\"component\":\"Button\",\"child\":\"l\",\"action\":{\"event\":{\"name\":\"go\",\"context\":{\"why\":{\"bind\":\"/why\"},\"ok\":{\"path\":\"/ok\"}}}}},{\"id\":\"l\",\"component\":\"Text\",\"text\":{\"bind\":\"/label\"}}]}")))
+         (errors (append (gethash "errors" result) nil)))
+    (should (= 2 (length errors)))
+    (should (seq-find (lambda (e) (string-match-p "/action/event/context/why: Expected a literal" e)) errors))
+    (should (seq-find (lambda (e) (string-match-p "/text: Expected a literal" e)) errors))))
+
+(ert-deftest a2ui-hosts-await-without-a-surface ()
+  (let ((host (a2ui-hosts-test--host)))
+    ;; No such surface: no point waiting.
+    (should (string-match-p "No surface nope"
+                            (a2ui-hosts-test--call host "a2ui_await_action" "{\"surfaceId\":\"nope\"}")))
+    ;; A rejected render: the press cannot come, so say so at once.
+    (a2ui-hosts-test--call host "render_a2ui" "{\"surfaceId\":\"f\",\"components\":[{\"id\":\"root\",\"component\":\"Blink\"}]}")
+    (let ((result (a2ui-json-parse (a2ui-hosts-test--call host "a2ui_await_action" "{\"surfaceId\":\"f\"}"))))
+      (should (equal (gethash "status" result) "invalid"))
+      (should (string-match-p "Blink" (aref (gethash "errors" result) 0))))
+    ;; Fixed, the await waits again.
+    (a2ui-hosts-test--call host "render_a2ui" a2ui-hosts-test--form)
+    (should-not (a2ui-hosts-test--call host "a2ui_await_action" "{\"surfaceId\":\"f\"}"))
+    (should (= 1 (length (a2ui-tools-host-waiters host))))))
 
 (ert-deftest a2ui-hosts-normalize ()
   (let* ((host (a2ui-hosts-test--host))
@@ -120,6 +159,16 @@
       (sleep-for 0.2)
       (should (string-match-p "\"status\":\"waiting\"" result))
       (should-not (a2ui-tools-host-waiters host)))))
+
+(ert-deftest a2ui-hosts-await-ends-when-closed ()
+  (let ((host (a2ui-hosts-test--host))
+        result)
+    (a2ui-hosts-test--call host "render_a2ui" a2ui-hosts-test--form)
+    (a2ui-tools-call host "a2ui_await_action" (a2ui-obj "surfaceId" "f") (lambda (r) (setq result r)))
+    (should-not result)
+    (a2ui-delete-surface (a2ui-tools-host-session host) "f")
+    (should (string-match-p "\"status\":\"closed\"" result))
+    (should-not (a2ui-tools-host-waiters host))))
 
 (ert-deftest a2ui-hosts-from-lisp ()
   (let ((v (a2ui-tools-from-lisp '(:a [1 (:b :json-false)] :c :null :d ((x . 1))))))
@@ -247,6 +296,31 @@ Emacs keeps serving requests while it waits."
                      "{\"status\":\"shown\",\"surfaceId\":\"f\"}"))
       (let ((surface (a2ui-session-surface (a2ui-tools-host-session (a2ui-gptel-host)) "f")))
         (should (equal (a2ui-get surface "/name") "Ada"))))))
+
+(ert-deftest a2ui-hosts-gptel-data-as-text ()
+  ;; gptel closes every object argument, so free-form data is JSON text.
+  (let* ((a2ui-tools-host-functions nil)
+         (render (car (a2ui-gptel-tools)))
+         (data (seq-find (lambda (a) (equal (plist-get a :name) "data")) (gptel-tool-args render))))
+    (should (equal (format "%s" (plist-get data :type)) "string"))
+    (with-temp-buffer
+      (should (equal (a2ui-hosts-test--gptel-call
+                      render
+                      (a2ui-json-encode
+                       (a2ui-obj "surfaceId" "f"
+                                 "components" (gethash "components" (a2ui-json-parse a2ui-hosts-test--form))
+                                 "data" "{\"name\":\"Lin\"}")))
+                     "{\"status\":\"shown\",\"surfaceId\":\"f\"}"))
+      (should (equal (a2ui-get (a2ui-session-surface (a2ui-tools-host-session (a2ui-gptel-host)) "f") "/name")
+                     "Lin")))))
+
+(ert-deftest a2ui-hosts-gptel-busy-while-tools-run ()
+  ;; While tools run gptel has no request open, only a live state machine.
+  (with-temp-buffer
+    (setq-local gptel--fsm-last (gptel-make-fsm :state 'TOOL :info (list :buffer (current-buffer))))
+    (should (a2ui-gptel--busy-p (current-buffer)))
+    (setf (gptel-fsm-state gptel--fsm-last) 'DONE)
+    (should-not (a2ui-gptel--busy-p (current-buffer)))))
 
 (ert-deftest a2ui-hosts-gptel-sends-actions ()
   (let* ((a2ui-tools-host-functions nil)

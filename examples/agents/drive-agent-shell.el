@@ -10,7 +10,9 @@
 ;; blocks it.
 ;;
 ;; Load this file through Eldev, with agent-shell and its dependencies
-;; on the load path, and call `a2ui-drive-agent-shell'.
+;; on the load path, and call `a2ui-drive-agent-shell'.  A2UI_PROMPT,
+;; when set, replaces the request (it should still ask for an Approve
+;; button outside any tab or modal, for the driver to press).
 
 ;;; Code:
 
@@ -51,7 +53,8 @@
       (princ "FAIL: the shell never became ready\n") (kill-emacs 1))
     (princ (format "shell %s ready in %s\n" (buffer-name buffer) project))
     (with-current-buffer buffer
-      (agent-shell-insert :text a2ui-drive-agent-shell--prompt :submit t :shell-buffer buffer))
+      (agent-shell-insert :text (or (getenv "A2UI_PROMPT") a2ui-drive-agent-shell--prompt)
+                          :submit t :shell-buffer buffer))
     ;; Wait for the surface and for the turn to end.
     (unless (a2ui-drive-agent-shell--wait
              (lambda ()
@@ -71,7 +74,10 @@
                                                                                            (a2ui-vui-label surface (gethash "child" c) nil))))))
                              (hash-table-values (a2ui-surface-components surface)))))
       (sleep-for 0.3)
-      (princ (format "\n--- surface %s\n%s\n" (a2ui-surface-id surface)
+      (princ (format "\n--- surface %s (%s)\n%s\n" (a2ui-surface-id surface)
+                     (string-join (seq-uniq (mapcar (lambda (c) (gethash "component" c))
+                                                    (hash-table-values (a2ui-surface-components surface))))
+                                  " ")
                      (with-current-buffer sbuffer (string-trim-right (buffer-substring-no-properties (point-min) (point-max))))))
       (unless button (princ "FAIL: no Approve button\n") (kill-emacs 1))
       (with-current-buffer sbuffer

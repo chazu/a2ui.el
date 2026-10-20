@@ -177,13 +177,17 @@ functions."
 
 (defun a2ui--ref-shape (schema)
   "Return how SCHEMA references components, or nil if it does not.
-The result is `id' for a ComponentId, `children' for a ChildList, or
-\(items . ALIST) for an array of objects whose properties reference
-components, ALIST mapping property names to shapes."
+The result is `id' for a ComponentId, `children' for a ChildList,
+`action' for an Action, `dynamic' for a Dynamic* value, or
+\(items . ALIST) for an array of objects
+whose properties reference components, ALIST mapping property names
+to shapes."
   (when (hash-table-p schema)
     (let ((ref (gethash "$ref" schema)))
       (cond ((and (stringp ref) (string-suffix-p "/ComponentId" ref)) 'id)
             ((and (stringp ref) (string-suffix-p "/ChildList" ref)) 'children)
+            ((and (stringp ref) (string-suffix-p "/Action" ref)) 'action)
+            ((and (stringp ref) (string-match-p "/Dynamic[A-Za-z]*\\'" ref)) 'dynamic)
             ((equal (gethash "type" schema) "array")
              (when-let* ((items (gethash "items" schema))
                          (props (and (hash-table-p items)
@@ -649,9 +653,46 @@ An `event' action is sent to the agent and the message returned; a
 
 ;;;; Validation
 
+(defconst a2ui--action-shape
+  "{\"event\": {\"name\": \"...\", \"context\": {...}}} or {\"functionCall\": {\"call\": \"...\", \"args\": {...}}}"
+  "How an Action is written, for validation messages.")
+
+(defun a2ui--validate-dynamic (value path)
+  "Check the Dynamic* VALUE at PATH; return a list of (PATH . MESSAGE).
+An object must be a binding {path} or a function call {call, args}."
+  (when (and (hash-table-p value)
+             (not (stringp (gethash "path" value)))
+             (not (stringp (gethash "call" value))))
+    (list (cons path "Expected a literal, {\"path\": \"/x\"} or {\"call\": \"...\", \"args\": {...}}"))))
+
+(defun a2ui--validate-action (value path)
+  "Check the Action VALUE at PATH; return a list of (PATH . MESSAGE)."
+  (let ((event (and (hash-table-p value) (gethash "event" value)))
+        (call (and (hash-table-p value) (gethash "functionCall" value))))
+    (cond
+     ((hash-table-p event)
+      (append (unless (stringp (gethash "name" event))
+                (list (cons (concat path "/event/name") "An event action needs a name string")))
+              (let ((context (gethash "context" event 'absent)))
+                (cond ((memq context '(absent nil)) nil)
+                      ((not (hash-table-p context))
+                       (list (cons (concat path "/event/context") "An event context must be an object")))
+                      (t (let (errors)
+                           (maphash (lambda (k v)
+                                      (setq errors (append errors (a2ui--validate-dynamic
+                                                                   v (format "%s/event/context/%s" path k)))))
+                                    context)
+                           errors))))))
+     ((hash-table-p call)
+      (unless (stringp (gethash "call" call))
+        (list (cons (concat path "/functionCall/call") "A functionCall needs a call string"))))
+     (t (list (cons path (concat "Expected an action like " a2ui--action-shape)))))))
+
 (defun a2ui--validate-ref (shape value path)
   "Check VALUE against ref SHAPE; return a list of (PATH . MESSAGE)."
   (pcase shape
+    ('action (a2ui--validate-action value path))
+    ('dynamic (a2ui--validate-dynamic value path))
     ('id (unless (stringp value)
            (list (cons path "Expected a component id string"))))
     ('children

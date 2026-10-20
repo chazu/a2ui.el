@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1",
   "title": "a2ui.el Emacs catalog",
-  "description": "The A2UI v0.9 basic catalog (less Tabs and Modal) plus Emacs components: Section, Table, Diff, Code, Picker, FileRef and OrgText.  Prefer them to building the same thing from Rows and Text.",
+  "description": "The A2UI v0.9 basic catalog plus Emacs components: Section, Table, Diff, Code, Picker, FileRef and OrgText.  Prefer them to building the same thing from Rows and Text.",
   "catalogId": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1",
   "components": {
     "Text": {
@@ -455,6 +455,88 @@
         }
       ],
       "unevaluatedProperties": false
+    },
+    "Tabs": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "const": "Tabs"
+            },
+            "tabs": {
+              "type": "array",
+              "description": "An array of objects, where each object defines a tab with a title and a child component.",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "description": "The tab title.",
+                    "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"
+                  },
+                  "child": {
+                    "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId",
+                    "description": "The ID of the child component."
+                  }
+                },
+                "required": [
+                  "title",
+                  "child"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "component",
+            "tabs"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "x-a2ui-digest": "Tabs: tabs:[{title:str child:id}]  (only the selected tab's child is shown; switching tabs sends nothing)"
+    },
+    "Modal": {
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "const": "Modal"
+            },
+            "trigger": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId",
+              "description": "The ID of the component that opens the modal when interacted with (e.g., a button)."
+            },
+            "content": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentId",
+              "description": "The ID of the component to be displayed inside the modal."
+            }
+          },
+          "required": [
+            "component",
+            "trigger",
+            "content"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "x-a2ui-digest": "Modal: trigger:id content:id  (trigger, usually a Button, opens content in a popup window; that press sends nothing)"
     },
     "Divider": {
       "type": "object",
@@ -1719,6 +1801,12 @@
         },
         {
           "$ref": "#/components/Card"
+        },
+        {
+          "$ref": "#/components/Tabs"
+        },
+        {
+          "$ref": "#/components/Modal"
         },
         {
           "$ref": "#/components/Divider"

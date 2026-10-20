@@ -59,17 +59,22 @@ buffer, they wait for the model to call a2ui_await_action."
 (declare-function gptel-send "gptel" (&optional arg))
 (declare-function gptel-fsm-info "gptel-request" (fsm))
 (declare-function gptel-tool-name "gptel-request" (tool))
+(declare-function gptel--fsm-live-p "gptel" (&optional fsm))
 
 (defvar-local a2ui-gptel--host nil
   "This buffer's A2UI host.")
 
 (defun a2ui-gptel--busy-p (buffer)
-  "Return non-nil while a gptel request for BUFFER is in flight."
-  (and (boundp 'gptel--request-alist)
-       (seq-some (lambda (entry)
-                   (ignore-errors
-                     (eq buffer (plist-get (gptel-fsm-info (cadr entry)) :buffer))))
-                 gptel--request-alist)))
+  "Return non-nil while a gptel request for BUFFER is in flight.
+That includes the time its tools run, when no HTTP request is open."
+  (or (and (fboundp 'gptel--fsm-live-p) (buffer-live-p buffer)
+           (with-current-buffer buffer
+             (and (bound-and-true-p gptel--fsm-last) (gptel--fsm-live-p))))
+      (and (boundp 'gptel--request-alist)
+           (seq-some (lambda (entry)
+                       (ignore-errors
+                         (eq buffer (plist-get (gptel-fsm-info (cadr entry)) :buffer))))
+                     gptel--request-alist))))
 
 (defun a2ui-gptel--send (buffer text)
   "Type TEXT at the end of chat BUFFER and send it to the model.
@@ -106,6 +111,12 @@ While a request is in flight, wait for it to finish."
         ((vectorp value) (vconcat (mapcar #'a2ui-gptel--plist value)))
         (t value)))
 
+(defun a2ui-gptel--free-object-p (prop)
+  "Return non-nil if PROP is an object schema without listed properties.
+gptel declares every object argument closed (additionalProperties
+false), which would forbid any key, so these are passed as JSON text."
+  (and (equal (gethash "type" prop) "object") (not (gethash "properties" prop))))
+
 (defun a2ui-gptel--args (schema)
   "Return gptel :args for the object JSON SCHEMA of a tool's parameters."
   (let ((required (append (gethash "required" schema) nil))
@@ -113,8 +124,9 @@ While a request is in flight, wait for it to finish."
     (maphash
      (lambda (name prop)
        (push (append (list :name name
-                           :type (intern (gethash "type" prop))
-                           :description (or (gethash "description" prop) name))
+                           :type (if (a2ui-gptel--free-object-p prop) 'string (intern (gethash "type" prop)))
+                           :description (concat (or (gethash "description" prop) name)
+                                                (when (a2ui-gptel--free-object-p prop) "  A JSON object, as text.")))
                      (unless (member name required) (list :optional t))
                      (when (gethash "items" prop)
                        (list :items (a2ui-gptel--plist (gethash "items" prop)))))
@@ -129,7 +141,10 @@ While a request is in flight, wait for it to finish."
    (lambda (spec)
      (let* ((name (plist-get spec :name))
             (args (a2ui-gptel--args (plist-get spec :parameters)))
-            (names (mapcar (lambda (a) (plist-get a :name)) args)))
+            (names (mapcar (lambda (a) (plist-get a :name)) args))
+            (texts (seq-filter (lambda (n) (a2ui-gptel--free-object-p
+                                            (gethash n (gethash "properties" (plist-get spec :parameters)))))
+                               names)))
        (gptel-make-tool
         :name name
         :description (plist-get spec :description)
@@ -138,7 +153,10 @@ While a request is in flight, wait for it to finish."
         :args args
         :function (lambda (callback &rest values)
                     (let ((obj (a2ui-obj)))
-                      (cl-mapc (lambda (n v) (when v (puthash n (a2ui-tools-from-lisp v) obj)))
+                      (cl-mapc (lambda (n v)
+                                 (when (and (stringp v) (member n texts))
+                                   (setq v (condition-case nil (a2ui-json-parse v) (error v))))
+                                 (when v (puthash n (a2ui-tools-from-lisp v) obj)))
                                names values)
                       (a2ui-tools-call (a2ui-gptel-host) name obj callback))))))
    (a2ui-tools-specs nil)))

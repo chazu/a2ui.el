@@ -72,7 +72,8 @@ A renderer adds itself here, e.g. `a2ui-vui-attach'.")
   "One conversation's A2UI session and how its actions reach the model."
   name session deliver
   (queue nil)                           ; undelivered action texts, oldest first
-  (waiters nil))                        ; (SURFACE-ID . CALLBACK) of awaits
+  (waiters nil)                         ; (SURFACE-ID . CALLBACK) of awaits
+  (failed nil))                         ; (SURFACE-ID . ERRORS) of rejected renders
 
 (defvar a2ui-tools--errors t
   "Errors collected while a tool call applies messages, or t when not.")
@@ -86,7 +87,11 @@ a2ui_await_action is waiting for it."
                    :name name :directory directory
                    :send-action-fn (lambda (message _metadata)
                                      (a2ui-tools--outbound host message)))))
-    (setf (a2ui-tools-host-session host) session)
+    (setf (a2ui-tools-host-session host) session
+          (a2ui-session-on-change-fn session)
+          (lambda (surface-id)
+            (unless (a2ui-session-surface session surface-id)
+              (a2ui-tools--closed host surface-id))))
     (run-hook-with-args 'a2ui-tools-host-functions session)
     host))
 
@@ -114,6 +119,14 @@ a2ui_await_action is waiting for it."
     (a2ui-tools--deliver host (gethash "surfaceId" (gethash "action" message))
                          (a2ui-tools-action-text (gethash "action" message))))))
 
+(defun a2ui-tools--closed (host surface-id)
+  "End HOST's a2ui_await_action calls on SURFACE-ID, which was deleted."
+  (dolist (waiter (a2ui-tools-host-waiters host))
+    (when (equal (car waiter) surface-id)
+      (setf (a2ui-tools-host-waiters host) (delq waiter (a2ui-tools-host-waiters host)))
+      (funcall (cdr waiter) (a2ui-tools--result "closed" "surfaceId" surface-id
+                                                "note" "The user closed this surface.")))))
+
 (defun a2ui-tools--deliver (host surface-id text)
   "Give the action TEXT from SURFACE-ID to HOST's model.
 A waiting a2ui_await_action for that surface (or any surface) gets it
@@ -130,7 +143,7 @@ first, then the host's DELIVER function; otherwise it is queued."
 ;;;; Tool definitions
 
 (defconst a2ui-tools--render-description
-  "Show the user an interactive surface in their Emacs: forms, tables, diffs, pickers and more, instead of asking in prose.  components is a flat array of A2UI v0.9 components {\"id\", \"component\": Type, ...props}; one has id \"root\"; containers name children by id; a Button's child is a Text id.  Bind values to data with {\"path\": \"/x\"}.  Rendering a surfaceId again replaces it; use update_a2ui for small changes.  Call a2ui_catalog first for the components.  When the user presses a button you receive \"User performed action ...\" with the resolved context."
+  "Show the user an interactive surface in their Emacs: forms, tables, diffs, pickers and more, instead of asking in prose.  components is a flat array of A2UI v0.9 components {\"id\", \"component\": Type, ...props}; one has id \"root\"; containers name children by id; a Button's child is a Text id.  Bind values to data with {\"path\": \"/x\"}, in props and action contexts alike.  Rendering a surfaceId again replaces it; use update_a2ui for small changes.  Call a2ui_catalog first for the components.  When the user presses a button you receive \"User performed action ...\" with the resolved context."
   "Description of render_a2ui.")
 
 (defun a2ui-tools--schema (properties required)
@@ -262,8 +275,11 @@ messages are accepted as they are."
   "Return a compact JSON result with STATUS and the key/value PAIRS."
   (a2ui-json-encode (apply #'a2ui-obj "status" status pairs)))
 
-(defun a2ui-tools--outcome (errors surface-id)
-  "Return the result of a render or update of SURFACE-ID with ERRORS."
+(defun a2ui-tools--outcome (host errors surface-id)
+  "Return the result of HOST's render or update of SURFACE-ID with ERRORS.
+A failure is remembered, so a2ui_await_action on the surface returns
+at once instead of waiting for a press that cannot come."
+  (setf (alist-get surface-id (a2ui-tools-host-failed host) nil 'remove #'equal) errors)
   (if errors
       (a2ui-tools--result "invalid" "surfaceId" surface-id
                           "errors" (vconcat errors)
@@ -279,7 +295,7 @@ messages are accepted as they are."
     (when (and (stringp id) (a2ui-session-surface session id))
       (clrhash (a2ui-surface-components (a2ui-session-surface session id))))
     (a2ui-tools--outcome
-     (a2ui-tools--apply host (a2ui-tools-render-operations session args catalog))
+     host (a2ui-tools--apply host (a2ui-tools-render-operations session args catalog))
      id)))
 
 (defun a2ui-tools--update (host args)
@@ -288,6 +304,7 @@ messages are accepted as they are."
     (if (not (a2ui-session-surface (a2ui-tools-host-session host) id))
         (a2ui-tools--result "invalid" "errors" (vector (format "No surface %s; call render_a2ui first" id)))
       (a2ui-tools--outcome
+       host
        (a2ui-tools--apply
         host
         (append
@@ -321,9 +338,19 @@ messages are accepted as they are."
          (queued (seq-find (lambda (text) (or (null surface-id)
                                               (string-search (format "on surface %S" surface-id) text)))
                            (a2ui-tools-host-queue host))))
-    (if queued
-        (progn (setf (a2ui-tools-host-queue host) (delete queued (a2ui-tools-host-queue host)))
-               (funcall callback queued))
+    (cond
+     (queued
+      (setf (a2ui-tools-host-queue host) (delete queued (a2ui-tools-host-queue host)))
+      (funcall callback queued))
+     ((and surface-id (not (a2ui-session-surface (a2ui-tools-host-session host) surface-id)))
+      (funcall callback (a2ui-tools--result "invalid" "errors"
+                                            (vector (format "No surface %s; show it with render_a2ui first" surface-id)))))
+     ((and surface-id (alist-get surface-id (a2ui-tools-host-failed host) nil nil #'equal))
+      (funcall callback (a2ui-tools--result "invalid" "surfaceId" surface-id
+                                            "errors" (vconcat (alist-get surface-id (a2ui-tools-host-failed host)
+                                                                         nil nil #'equal))
+                                            "hint" "The last render of this surface failed; fix it before waiting.")))
+     (t
       (let* ((done nil)
              (waiter (cons surface-id (lambda (text)
                                         (unless done (setq done t) (funcall callback text)))))
@@ -335,7 +362,7 @@ messages are accepted as they are."
                        (unless done
                          (setf (a2ui-tools-host-waiters host) (delq waiter (a2ui-tools-host-waiters host)))
                          (funcall (cdr waiter)
-                                  (a2ui-tools--result "waiting" "note" "No action yet; the user may still be filling in the surface.")))))))))
+                                  (a2ui-tools--result "waiting" "note" "No action yet; the user may still be filling in the surface."))))))))))
 
 (defun a2ui-tools-call (host name args callback)
   "Run tool NAME of HOST with ARGS, a JSON object; CALLBACK gets the result.

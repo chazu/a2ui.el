@@ -1,0 +1,3 @@
+{"version": "v0.9", "createSurface": {"surfaceId": "s", "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s", "components": [{"id": "root", "component": "Tabs", "tabs": [{"title": "Overview", "child": "overview"}, {"title": {"path": "/second"}, "child": "details"}, {"title": "Log", "child": "log"}]}, {"id": "overview", "component": "Text", "text": "The first tab is selected at first."}, {"id": "details", "component": "TextField", "label": "Name", "value": {"path": "/name"}}, {"id": "log", "component": "Text", "text": "Only one tab's child is drawn."}]}}
+{"version": "v0.9", "updateDataModel": {"surfaceId": "s", "value": {"second": "Details", "name": "Ada"}}}

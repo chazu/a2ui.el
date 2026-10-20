@@ -1,8 +1,23 @@
 === gallery-recipe-card
 ────────────────────────────────────────────────────────────
-  [unsupported: Tabs]
+  [Overview] [Ingredients] [Instructions]
+  ──────────────────────────────────────────────────────────
+  ▣ Image
+  Mediterranean Quinoa Bowl
+  ★  4.9  (1,247 reviews)
+  ▦  15 min prep  ⚠  20 min cook
+  Serves 4
 ────────────────────────────────────────────────────────────
 --- faces
 a2ui-rule: ────────────────────────────────────────────────────────────
-a2ui-placeholder: [unsupported: Tabs]
+a2ui-tab-selected: [Overview]
+a2ui-tab: [Ingredients]
+a2ui-tab: [Instructions]
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-heading-3: Mediterranean Quinoa Bowl
+a2ui-caption: (1,247 reviews)
+a2ui-caption: 15 min prep
+a2ui-caption: 20 min cook
+a2ui-caption: Serves 4
 a2ui-rule: ────────────────────────────────────────────────────────────

@@ -134,21 +134,6 @@ emphasis markers and link targets) is removed."
 
 ;;;; Local state
 
-(defvar a2ui-emacs--local (make-hash-table :test 'eq :weakness 'key)
-  "Surface -> hash table of view state the data model does not hold.")
-
-(defun a2ui-emacs--local (surface key default)
-  "Return SURFACE's local view state at KEY, or DEFAULT."
-  (if-let* ((table (gethash surface a2ui-emacs--local)))
-      (gethash key table default)
-    default))
-
-(defun a2ui-emacs--set-local (surface key value)
-  "Set SURFACE's local view state at KEY to VALUE and re-render."
-  (puthash key value (or (gethash surface a2ui-emacs--local)
-                         (puthash surface (make-hash-table :test 'equal) a2ui-emacs--local)))
-  (a2ui-vui-refresh surface))
-
 (defun a2ui-emacs--run-action (surface component prop scope)
   "Run the action in PROP of COMPONENT on SURFACE, resolving in SCOPE.
 The action is sent as coming from COMPONENT."
@@ -162,13 +147,13 @@ The action is sent as coming from COMPONENT."
          (key (a2ui-vui-key c scope))
          (collapsed (if path
                         (a2ui-true-p (a2ui-get surface path))
-                      (a2ui-emacs--local surface key
+                      (a2ui-vui-local surface key
                                          (a2ui-true-p (a2ui-resolve-prop c "collapsed" surface scope)))))
          (toggle (lambda ()
                    (interactive)
                    (if path
                        (a2ui-vui--write surface path (a2ui-bool (not collapsed)))
-                     (a2ui-emacs--set-local surface key (not collapsed))))))
+                     (a2ui-vui-set-local surface key (not collapsed))))))
     (vui-vstack
      (vui-button (concat (if collapsed "▸ " "▾ ") (a2ui-vui--string c "title" surface scope))
        :key key

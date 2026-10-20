@@ -39,10 +39,32 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'vui)
+(require 'url-parse)
 (require 'a2ui-core)
 
 (defcustom a2ui-vui-width 60
   "Width in characters of rules drawn by Card and Divider."
+  :type 'natnum
+  :group 'a2ui)
+
+(defcustom a2ui-vui-inline-images 'ask
+  "Whether Image components show the picture in frames that can.
+`ask' shows a button that asks before fetching an http(s) image, t
+fetches at once and nil shows only a link.  data: URLs need no
+network, so they show unless this is nil.  Hosts listed in
+`a2ui-vui-image-hosts' are fetched without asking."
+  :type '(choice (const :tag "Ask before fetching" ask)
+                 (const :tag "Fetch at once" t)
+                 (const :tag "Links only" nil))
+  :group 'a2ui)
+
+(defcustom a2ui-vui-image-hosts nil
+  "Hosts whose images are fetched without asking, e.g. \"img.example.com\"."
+  :type '(repeat string)
+  :group 'a2ui)
+
+(defcustom a2ui-vui-image-max-bytes (* 5 1024 1024)
+  "Largest image, in bytes, that an Image component fetches."
   :type 'natnum
   :group 'a2ui)
 
@@ -84,6 +106,10 @@ agent."
   "Face for primary buttons." :group 'a2ui)
 (defface a2ui-button-inactive '((t :inherit shadow))
   "Face for buttons whose checks fail." :group 'a2ui)
+(defface a2ui-tab '((t :inherit shadow))
+  "Face for the titles of unselected tabs." :group 'a2ui)
+(defface a2ui-tab-selected '((t :inherit bold :underline t))
+  "Face for the title of the selected tab." :group 'a2ui)
 (defface a2ui-error '((t :inherit error))
   "Face for failing check messages." :group 'a2ui)
 (defface a2ui-rule '((t :inherit shadow))
@@ -432,6 +458,25 @@ editable widgets stacks as a column instead; see
       (a2ui-vui--row c surface scope)
     (apply #'vui-vstack (a2ui-vui-children c surface scope))))
 
+;;;;; View state
+
+(defvar a2ui-vui--local (make-hash-table :test 'eq :weakness 'key)
+  "Surface -> hash table of view state the data model does not hold.")
+
+(defun a2ui-vui-local (surface key default)
+  "Return SURFACE's view state at KEY, or DEFAULT.
+View state, such as a fold or the selected tab, belongs to this
+renderer, not to the data model the agent sees."
+  (if-let* ((table (gethash surface a2ui-vui--local)))
+      (gethash key table default)
+    default))
+
+(defun a2ui-vui-set-local (surface key value)
+  "Set SURFACE's view state at KEY to VALUE and re-render."
+  (puthash key value (or (gethash surface a2ui-vui--local)
+                         (puthash surface (make-hash-table :test 'equal) a2ui-vui--local)))
+  (a2ui-vui-refresh surface))
+
 (a2ui-define-component basic "Card" (c surface scope)
   (vui-vstack
    (a2ui-vui--rule)
@@ -439,25 +484,101 @@ editable widgets stacks as a column instead; see
                            (a2ui-vui-render surface (gethash "child" c) scope)))
    (a2ui-vui--rule)))
 
+(defun a2ui-vui--modal-of (surface id)
+  "Return the Modal of SURFACE whose trigger is component ID, or nil."
+  (catch 'found
+    (maphash (lambda (_ c)
+               (when (and (equal (gethash "component" c) "Modal")
+                          (equal (gethash "trigger" c) id))
+                 (throw 'found c)))
+             (a2ui-surface-components surface))
+    nil))
+
+(defun a2ui-vui--modal-opener (surface modal scope)
+  "Return a command opening MODAL of SURFACE, its content in SCOPE."
+  (lambda ()
+    (interactive)
+    (a2ui-vui-open-modal surface (gethash "id" modal) (gethash "content" modal) scope)))
+
 (a2ui-define-component basic "Button" (c surface scope)
   (let* ((variant (gethash "variant" c))
-         (failures (a2ui-check-failures c surface scope)))
+         (failures (a2ui-check-failures c surface scope))
+         (modal (a2ui-vui--modal-of surface (gethash "id" c)))
+         (open (and modal (a2ui-vui--modal-opener surface modal scope))))
     (vui-button (a2ui-vui-label surface (gethash "child" c) scope)
       :key (a2ui-vui-key c scope)
-      :face (cond (failures 'a2ui-button-inactive)
+      :face (cond ((and failures (not open)) 'a2ui-button-inactive)
                   ((equal variant "primary") 'a2ui-button-primary))
       :no-decoration (equal variant "borderless")
-      :help-echo (and failures (string-join failures "\n"))
+      :help-echo (and failures (not open) (string-join failures "\n"))
       :on-click (lambda ()
                   ;; Checks are re-run: the data may have changed
-                  ;; since this render.
-                  (if-let* ((now (a2ui-check-failures c surface scope)))
+                  ;; since this render.  A Modal's trigger only opens
+                  ;; the modal; it sends nothing.
+                  (if-let* (((not open))
+                            (now (a2ui-check-failures c surface scope)))
                       (progn
                         ;; Reveal every input's failures, to show why.
                         (a2ui-vui--touch surface :all)
                         (a2ui-vui-refresh surface)
                         (message "%s" (string-join now " ")))
-                    (a2ui-dispatch-action surface c scope))))))
+                    (if open
+                        (funcall open)
+                      (a2ui-dispatch-action surface c scope)))))))
+
+(a2ui-define-component basic "Tabs" (c surface scope)
+  (let* ((tabs (cl-remove-if-not #'hash-table-p (append (gethash "tabs" c) nil)))
+         (key (a2ui-vui-key c scope))
+         (selected (min (a2ui-vui-local surface key 0) (max 0 (1- (length tabs)))))
+         (select (lambda (n) (a2ui-vui-set-local surface key (mod n (max 1 (length tabs))))))
+         (titles (cl-loop for tab in tabs for i from 0
+                          collect (let* ((i i)
+                                         (prev (lambda () (interactive) (funcall select (1- i))))
+                                         (next (lambda () (interactive) (funcall select (1+ i)))))
+                                    (vui-button (a2ui-vui--string tab "title" surface scope)
+                                      :key (format "%s/tab/%d" key i)
+                                      :face (if (= i selected) 'a2ui-tab-selected 'a2ui-tab)
+                                      :help-echo "RET shows this tab; left and right switch"
+                                      :keymap (define-keymap "<left>" prev "<right>" next)
+                                      :on-click (lambda () (funcall select i)))))))
+    (if (null tabs)
+        (a2ui-vui--placeholder "[no tabs]")
+      (vui-vstack
+       (apply #'vui-flex :wrap t :spacing 1 :width (- a2ui-vui-width a2ui-vui--indent) titles)
+       (a2ui-vui--rule)
+       (a2ui-vui-render surface (gethash "child" (nth selected tabs)) scope)))))
+
+(defun a2ui-vui--has-parent-p (surface id except)
+  "Return non-nil if a component of SURFACE other than EXCEPT shows ID."
+  (catch 'found
+    (maphash (lambda (_ c)
+               (unless (eq c except)
+                 (let ((children (gethash "children" c))
+                       (tabs (gethash "tabs" c)))
+                   (when (or (equal (gethash "child" c) id)
+                             (equal (gethash "content" c) id)
+                             (and (vectorp children) (seq-contains-p children id))
+                             (and (vectorp tabs)
+                                  (seq-some (lambda (tab) (and (hash-table-p tab) (equal (gethash "child" tab) id)))
+                                            tabs)))
+                     (throw 'found t)))))
+             (a2ui-surface-components surface))
+    nil))
+
+(a2ui-define-component basic "Modal" (c surface scope)
+  (let* ((trigger (gethash "trigger" c))
+         (tc (and (stringp trigger) (a2ui-surface-component surface trigger))))
+    (cond
+     ;; A trigger placed elsewhere opens the modal from there.
+     ((and tc (a2ui-vui--has-parent-p surface trigger c)) nil)
+     ;; A Button trigger opens the modal itself.
+     ((equal (and tc (gethash "component" tc)) "Button")
+      (a2ui-vui-render surface trigger scope))
+     ;; Anything else gets a button of its own beside it.
+     (t (vui-hstack :spacing 1
+                    (a2ui-vui-render surface trigger scope)
+                    (vui-button "Open" :key (concat (a2ui-vui-key c scope) "/open")
+                      :on-click (a2ui-vui--modal-opener surface c scope)))))))
 
 (a2ui-define-component basic "TextField" (c surface scope)
   (let* ((path (a2ui-binding-path c "value" scope))
@@ -682,8 +803,80 @@ GLYPH marks the link, labelled KIND when C has no description."
       (a2ui-vui--link (format "%s %s" glyph (if (string-empty-p description) kind description))
                       url (a2ui-vui-key c scope)))))
 
+;;;;; Images
+
+(defvar a2ui-vui--images (make-hash-table :test 'equal)
+  "URL -> fetched image bytes, `loading' or `failed'.")
+
+(defun a2ui-vui--data-url-bytes (url)
+  "Return the decoded bytes of URL if it is a base64 data: image URL."
+  (when (string-match "\\`data:image/[-+.a-zA-Z0-9]+;base64," url)
+    (ignore-errors (base64-decode-string (substring url (match-end 0))))))
+
+(defun a2ui-vui--fetch-image (url surface)
+  "Fetch the image at URL in the background, then re-render SURFACE."
+  (puthash url 'loading a2ui-vui--images)
+  (url-retrieve
+   url
+   (lambda (status)
+     (let ((data (and (not (plist-get status :error))
+                      (progn (set-buffer-multibyte nil)
+                             (goto-char (point-min))
+                             (re-search-forward "\r?\n\r?\n" nil t))
+                      (buffer-substring-no-properties (point) (point-max)))))
+       (kill-buffer)
+       (puthash url (if (and data (<= (length data) a2ui-vui-image-max-bytes)
+                             (image-type-from-data data))
+                        data
+                      'failed)
+                a2ui-vui--images)
+       (a2ui-vui-refresh surface)))
+   nil t t))
+
+(defun a2ui-vui--fetch-allowed-p (url)
+  "Return non-nil if URL may be fetched without asking."
+  (or (eq a2ui-vui-inline-images t)
+      (member (url-host (url-generic-parse-url url)) a2ui-vui-image-hosts)))
+
+(defun a2ui-vui--image-vnode (c data label scope)
+  "Return a vnode showing image DATA for Image C in SCOPE, or nil.
+LABEL describes it, for `help-echo' and where images cannot show."
+  (let* ((small (member (gethash "variant" c) '("icon" "avatar")))
+         (image (ignore-errors
+                  (create-image data nil t
+                                :max-width (* (max 8 (- a2ui-vui-width a2ui-vui--indent)) (frame-char-width))
+                                :max-height (* (if small 2 16) (frame-char-height))
+                                :ascent 'center))))
+    (when image
+      ;; Distinct text per image, so vui redraws when the image changes.
+      (vui-text (propertize (format "[%s %s]" label (sxhash-equal data))
+                            'display image 'help-echo label)
+        :key (a2ui-vui-key c scope)))))
+
 (a2ui-define-component basic "Image" (c surface scope)
-  (a2ui-vui--media c surface scope "▣" "Image"))
+  (let* ((url (a2ui-vui--string c "url" surface scope))
+         (description (a2ui-vui--string c "description" surface scope))
+         (label (if (string-empty-p description) "Image" description))
+         (inline (and a2ui-vui-inline-images (not (string-empty-p url)) (display-images-p)))
+         (web (string-match-p "\\`https?://" url))
+         (data (and inline (or (a2ui-vui--data-url-bytes url) (and web (gethash url a2ui-vui--images)))))
+         (link (lambda () (a2ui-vui--media c surface scope "▣" "Image"))))
+    (cond
+     ((stringp data) (or (a2ui-vui--image-vnode c data label scope) (funcall link)))
+     ((or (not inline) (not web) (eq data 'failed)) (funcall link))
+     ((eq data 'loading) (vui-text (format "▣ %s (loading…)" label) :face 'shadow))
+     ((a2ui-vui--fetch-allowed-p url)
+      (a2ui-vui--fetch-image url surface)
+      (vui-text (format "▣ %s (loading…)" label) :face 'shadow))
+     (t (vui-hstack :spacing 1
+                    (funcall link)
+                    (vui-button "show"
+                      :key (concat (a2ui-vui-key c scope) "/show")
+                      :help-echo (format "Fetch and show %s" url)
+                      :on-click (lambda ()
+                                  (when (y-or-n-p (format "Agent wants to show the image at %s; fetch it? " url))
+                                    (a2ui-vui--fetch-image url surface)
+                                    (a2ui-vui-refresh surface)))))))))
 
 (a2ui-define-component basic "Video" (c surface scope)
   (a2ui-vui--media c surface scope "▶" "Video"))
@@ -770,8 +963,18 @@ SCOPE is the item path C renders in."
   (when-let* ((views (gethash session a2ui-vui--views)))
     (gethash surface-id views)))
 
+(defvar a2ui-vui--modals (make-hash-table :test 'eq :weakness 'key)
+  "Session -> list of (SURFACE-ID . BUMP-FN) of open modals.")
+
+(defun a2ui-vui--bump-modals (session surface-id)
+  "Re-render the open modals of SURFACE-ID in SESSION."
+  (dolist (modal (gethash session a2ui-vui--modals))
+    (when (equal (car modal) surface-id)
+      (funcall (cdr modal)))))
+
 (defun a2ui-vui--on-change (session surface-id)
   "Re-render the view of SURFACE-ID in SESSION, showing new surfaces."
+  (a2ui-vui--bump-modals session surface-id)
   (if-let* ((view (a2ui-vui--view session surface-id)))
       (funcall (cdr view))
     (when (and a2ui-vui-auto-show (a2ui-session-surface session surface-id))
@@ -827,7 +1030,8 @@ An existing `on-change-fn' keeps being called."
     (concat " " (propertize (format "%s" agent) 'face 'bold) "  " a2ui-vui-surface-id)))
 
 (defun a2ui-vui-refresh (surface)
-  "Re-render the view of SURFACE, if it has one."
+  "Re-render the view of SURFACE, and its open modals, if it has them."
+  (a2ui-vui--bump-modals (a2ui-surface-session surface) (a2ui-surface-id surface))
   (when-let* ((view (a2ui-vui--view (a2ui-surface-session surface) (a2ui-surface-id surface))))
     (funcall (cdr view))))
 
@@ -838,7 +1042,8 @@ An existing `on-change-fn' keeps being called."
     (funcall (cdr view))))
 
 (defun a2ui-surface-delete ()
-  "Delete the surface in the current buffer and kill the buffer."
+  "Delete the surface in the current buffer and kill the buffer.
+A model waiting for a press on it is told the surface was closed."
   (interactive)
   (when (and a2ui-vui-session (yes-or-no-p (format "Delete surface %s? " a2ui-vui-surface-id)))
     (a2ui-delete-surface a2ui-vui-session a2ui-vui-surface-id)
@@ -858,6 +1063,71 @@ and \\`q' buries the buffer.
   (when a2ui-surface-mode
     (setq-local revert-buffer-function #'a2ui-surface-refresh)
     (setq header-line-format '(:eval (a2ui-vui--header-line)))))
+
+;;;; Modals
+
+(defcustom a2ui-vui-modal-display-action
+  '((display-buffer-reuse-window display-buffer-below-selected)
+    (window-height . fit-window-to-buffer))
+  "How `display-buffer' shows a Modal's content.
+Entries in `display-buffer-alist' for `*a2ui: SURFACE/MODAL*' buffers
+take precedence."
+  :type 'sexp
+  :group 'a2ui)
+
+(vui-defcomponent a2ui-vui-modal-view (session surface-id content scope)
+  :state ((tick 0))
+  :on-mount
+  (let ((modal (cons surface-id (vui-with-async-context (vui-set-state :tick #'1+)))))
+    (push modal (gethash session a2ui-vui--modals))
+    (lambda () (puthash session (delq modal (gethash session a2ui-vui--modals)) a2ui-vui--modals)))
+  :render
+  (let ((surface (a2ui-session-surface session surface-id)))
+    (ignore tick)
+    (if surface
+        (a2ui-vui-render surface content scope)
+      (vui-text (format "Surface %s was deleted." surface-id) :face 'shadow))))
+
+(defun a2ui-modal-close ()
+  "Close this modal."
+  (interactive)
+  (quit-window t))
+
+(defvar-keymap a2ui-modal-mode-map
+  :doc "Keymap for buffers showing a Modal's content."
+  "C-c C-k" #'a2ui-modal-close
+  "C-c C-c" #'a2ui-modal-close)
+
+(define-minor-mode a2ui-modal-mode
+  "Minor mode for the popup buffer of an A2UI Modal.
+Edits go to the surface's data model as in the surface itself.
+
+\\{a2ui-modal-mode-map}"
+  :lighter " A2UI-Modal"
+  (when a2ui-modal-mode
+    (setq-local revert-buffer-function #'a2ui-surface-refresh)
+    (setq header-line-format '(:eval (a2ui-vui--header-line)))))
+
+(defun a2ui-vui-open-modal (surface modal-id content scope)
+  "Show component CONTENT of SURFACE, in SCOPE, as Modal MODAL-ID's popup.
+The popup shows live data and closes with \\<a2ui-modal-mode-map>\\[a2ui-modal-close].
+Return its buffer."
+  (let* ((session (a2ui-surface-session surface))
+         (surface-id (a2ui-surface-id surface))
+         (name (format "*a2ui: %s/%s*" surface-id modal-id))
+         (buffer (get-buffer name)))
+    (unless (buffer-live-p buffer)
+      (setq buffer (get-buffer-create name))
+      (with-current-buffer buffer
+        (setq a2ui-vui-session session
+              a2ui-vui-surface-id surface-id)
+        (vui-render (vui-component 'a2ui-vui-modal-view
+                                   :session session :surface-id surface-id
+                                   :content content :scope scope)
+                    buffer)
+        (a2ui-modal-mode 1)))
+    (pop-to-buffer buffer a2ui-vui-modal-display-action)
+    buffer))
 
 (defun a2ui-vui--buffer-name (surface-id)
   "Return a fresh buffer name for SURFACE-ID."

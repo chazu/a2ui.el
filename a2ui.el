@@ -148,6 +148,72 @@ METADATA is shown after outbound messages that carry it."
   (interactive)
   (display-buffer (a2ui--log-buffer)))
 
+;;;; Surface list
+
+(defun a2ui--live-surfaces ()
+  "Return (SESSION . SURFACE) for every surface the renderer knows."
+  (let (out)
+    (maphash (lambda (session _views)
+               (dolist (id (a2ui-session-surface-ids session))
+                 (push (cons session (a2ui-session-surface session id)) out)))
+             a2ui-vui--views)
+    (nreverse out)))
+
+(defun a2ui--surface-list-entries ()
+  "Return the `tabulated-list-entries' of `a2ui-surface-list-mode'."
+  (mapcar (lambda (entry)
+            (let* ((session (car entry))
+                   (surface (cdr entry))
+                   (id (a2ui-surface-id surface))
+                   (buffer (car (a2ui-vui--view session id))))
+              (list entry
+                    (vector (or (a2ui-session-name session) "")
+                            id
+                            (file-name-nondirectory
+                             (directory-file-name (or (a2ui-catalog-id (a2ui-surface-catalog surface)) "")))
+                            (number-to-string (hash-table-count (a2ui-surface-components surface)))
+                            (if (buffer-live-p buffer) (buffer-name buffer) "")))))
+          (a2ui--live-surfaces)))
+
+(defun a2ui-surface-list-visit ()
+  "Show the surface on this line."
+  (interactive)
+  (when-let* ((entry (tabulated-list-get-id)))
+    (pop-to-buffer (a2ui-show-surface (car entry) (a2ui-surface-id (cdr entry))))))
+
+(defun a2ui-surface-list-delete ()
+  "Delete the surface on this line, after asking."
+  (interactive)
+  (when-let* ((entry (tabulated-list-get-id))
+              (id (a2ui-surface-id (cdr entry))))
+    (when (yes-or-no-p (format "Delete surface %s? " id))
+      (let ((buffer (car (a2ui-vui--view (car entry) id))))
+        (a2ui-delete-surface (car entry) id)
+        (when (buffer-live-p buffer) (kill-buffer buffer)))
+      (tabulated-list-revert))))
+
+(defvar-keymap a2ui-surface-list-mode-map
+  :doc "Keymap for `a2ui-list-surfaces'."
+  "RET" #'a2ui-surface-list-visit
+  "d" #'a2ui-surface-list-delete)
+
+(define-derived-mode a2ui-surface-list-mode tabulated-list-mode "A2UI Surfaces"
+  "Major mode listing live A2UI surfaces.
+\\<a2ui-surface-list-mode-map>\\[a2ui-surface-list-visit] shows a surface, \\[a2ui-surface-list-delete] deletes it and \\`g' refreshes."
+  (setq tabulated-list-format [("Session" 24 t) ("Surface" 24 t) ("Catalog" 10 t)
+                               ("Components" 10 t :right-align t) ("Buffer" 0 t)]
+        tabulated-list-entries #'a2ui--surface-list-entries)
+  (tabulated-list-init-header))
+
+;;;###autoload
+(defun a2ui-list-surfaces ()
+  "List the live A2UI surfaces of every session."
+  (interactive)
+  (with-current-buffer (get-buffer-create "*a2ui surfaces*")
+    (a2ui-surface-list-mode)
+    (tabulated-list-print)
+    (pop-to-buffer (current-buffer))))
+
 ;;;; Replay
 
 (defvar a2ui-replay-session nil

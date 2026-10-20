@@ -32,7 +32,7 @@ Reviewer: [Select...]
 
 ## Features
 
-- **The A2UI v0.9 basic catalog**: Text with Markdown, Column, Row, List, Card, Divider, Icon, Button, TextField (including multi-line, edited in its own buffer), CheckBox, ChoicePicker, Slider and DateTimeInput (using `org-read-date`). Image, Video and AudioPlayer appear as links. Tabs and Modal are not supported yet.
+- **The A2UI v0.9 basic catalog**: Text with Markdown, Column, Row, List, Card, Divider, Icon, Button, TextField (including multi-line, edited in its own buffer), CheckBox, ChoicePicker, Slider, DateTimeInput (using `org-read-date`), Tabs and Modal (its content opens in a popup window). Images show inline in graphical frames, after asking before anything is fetched; Video and AudioPlayer appear as links.
 - **An Emacs catalog**: the basic components plus Section (folds), Table (row selection and row actions), Diff (fontified by `diff-mode`, with Accept/Reject), Code (fontified by the language's major mode), Picker (`completing-read`), FileRef and OrgText.
 - **Live binding**: inputs write to the data model as you type, and checks run as you go. A field's errors show once you've touched it, or after a blocked submit.
 - **Works with the agents you already use**: gptel (native tools), agent-shell (Claude Code, Codex and other ACP agents), Claude Code or Codex in a terminal (through an MCP server inside Emacs), and any [AG-UI](https://docs.ag-ui.com) agent. See [Connecting an agent](#connecting-an-agent).
@@ -114,7 +114,13 @@ You don't need to name components in your request. "Show me something to review 
 
 Ask for UI in any gptel chat buffer, e.g. *"Show me a form to collect the deploy target and replica count."* When you press a button, the press is typed into the chat as `User performed action "…" … Context: {…}` and sent, so the model answers in the conversation. Set `a2ui-gptel-send-actions` to nil to have the model wait in `a2ui_await_action` instead. Each chat buffer has its own surfaces.
 
-You can turn the tools on or off per buffer from gptel's tool menu (category `a2ui`). Small local models often skip `a2ui_catalog` and guess component shapes. Setting `a2ui-tools-catalog-in-description` to t puts the digest in the tool description, at about 950 tokens per request. Use a model that calls tools reliably: with a 7B Ollama model, gptel ran the tools but the model often wrote its calls as text.
+You can turn the tools on or off per buffer from gptel's tool menu (category `a2ui`). Small local models often skip `a2ui_catalog` and guess component shapes. Setting `a2ui-tools-catalog-in-description` to t puts the digest in the tool description, at about 950 tokens per request.
+
+Use a model that calls tools reliably. These were checked live with `examples/agents/drive-gptel.el`, through OpenRouter:
+- Claude Haiku 5.5 got it right on the first try, both waiting in `a2ui_await_action` and taking the press as a chat message.
+- Qwen3-Coder fixed its surfaces from the validation errors, then finished.
+- GPT-4o-mini finished one run in two.
+- A 7B Ollama model ran the tools but often wrote its calls as text.
 
 ### agent-shell (Claude Code, Codex, …)
 
@@ -224,6 +230,7 @@ The `drive-*.el` files next to them play the user in batch Emacs against each ho
 | `a2ui-agui-connect` | Start a thread with an agent from `a2ui-agui-agents`, or with a URL |
 | `a2ui-agui-send` | Send a message to the current agent; surfaces appear as it answers |
 | `a2ui-agui-abort` | Stop the running request |
+| `a2ui-list-surfaces` | Every live surface; `RET` shows one, `d` deletes it |
 | `a2ui-replay-file` | Feed a `.jsonl` file of A2UI messages into a local session |
 | `a2ui-show-log` | Every A2UI message in and out, as pretty JSON |
 | `a2ui-agui-show-log` | Raw AG-UI traffic, one event per line |
@@ -233,13 +240,14 @@ In a surface buffer:
 | Key | Action |
 |---|---|
 | `TAB` / `S-TAB` | Move between controls |
-| `RET` | Activate a button, checkbox, picker or link; fold a Section |
+| `RET` | Activate a button, checkbox, picker or link; fold a Section; pick a tab |
+| `<left>` / `<right>` | Previous or next tab (point on a tab title) |
 | `-` / `+` | Step a Slider (point on its value) |
 | `g` | Re-render |
 | `q` | Bury the buffer |
-| `C-c C-k` | Delete the surface |
+| `C-c C-k` | Delete the surface; a model waiting in `a2ui_await_action` is told it was closed |
 
-In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels.
+In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels. A Modal's popup closes with `C-c C-k` (or `C-c C-c`); edits in it go to the surface's data like any other.
 
 ## Customization
 
@@ -259,6 +267,10 @@ In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels.
 | `a2ui-vui-width` | `60` | Width of rules and wrapped rows |
 | `a2ui-vui-field-width` | `30` | Width of text fields |
 | `a2ui-vui-auto-show` | `t` | Display new surfaces at once |
+| `a2ui-vui-inline-images` | `ask` | Images: `ask` before fetching, `t` fetch at once, `nil` links only |
+| `a2ui-vui-image-hosts` | `nil` | Hosts whose images are fetched without asking |
+| `a2ui-vui-image-max-bytes` | 5 MB | Largest image fetched |
+| `a2ui-vui-modal-display-action` | below, fitted | How a Modal's popup is displayed |
 | `a2ui-trust-agent-display-name` | `nil` | Show the surface's own `agentDisplayName` instead of the configured agent name |
 | `a2ui-confirm-open-url` | `t` | Ask before opening a URL; only http(s) is ever opened |
 | `a2ui-time-zone` | `nil` | Zone for `formatDate`; `nil` means local time |
@@ -312,7 +324,7 @@ eldev compile --warnings-as-errors
 python3 scripts/build-emacs-catalog.py   # regenerate catalogs/emacs/catalog.json
 ```
 
-`benchmarks/a2ui-bench.el` times rendering and typing into large surfaces. `examples/agents/drive-deploy.el` plays the deploy example against a live agent in batch Emacs.
+`benchmarks/a2ui-bench.el` times rendering and typing into large surfaces. The `examples/agents/drive-*.el` files play the user against live agents in batch Emacs. `drive-gptel.el` takes `A2UI_GPTEL_BACKEND` (`ollama` or `openrouter`), `A2UI_GPTEL_MODEL` and `A2UI_GPTEL_CHAT`; `drive-agent-shell.el` takes `A2UI_PROMPT`.
 
 ## License
 
