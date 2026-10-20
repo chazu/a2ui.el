@@ -245,6 +245,20 @@ fixture files FIXTURES, fed in small chunks."
      agent "{\"type\":\"ACTIVITY_DELTA\",\"messageId\":\"a\",\"activityType\":\"a2ui-surface\",\"patch\":[{\"op\":\"add\",\"path\":\"/a2ui_operations/-\",\"value\":{\"version\":\"v0.9\",\"updateComponents\":{\"surfaceId\":\"d\",\"components\":[{\"id\":\"root\",\"component\":\"Text\",\"text\":\"hi\"}]}}}]}")
     (should (a2ui-surface-component (a2ui-session-surface (a2ui-agui-agent-session agent) "d") "root"))))
 
+(ert-deftest a2ui-agui-activity-applies-new-operations-only ()
+  ;; Each delta carries every operation so far; a data update the user
+  ;; has since edited over is not applied again.
+  (a2ui-agui-test--with-agent (agent nil)
+    (a2ui-agui-test--event
+     agent (format "{\"type\":\"ACTIVITY_SNAPSHOT\",\"messageId\":\"a\",\"activityType\":\"a2ui-surface\",\"content\":{\"a2ui_operations\":[{\"version\":\"v0.9\",\"createSurface\":{\"surfaceId\":\"d\",\"catalogId\":%S}},{\"version\":\"v0.9\",\"updateDataModel\":{\"surfaceId\":\"d\",\"path\":\"/name\",\"value\":\"Al\"}}]}}"
+                   a2ui-basic-catalog-id))
+    (let ((surface (a2ui-session-surface (a2ui-agui-agent-session agent) "d")))
+      (a2ui-set surface "/name" "Bob")
+      (a2ui-agui-test--event
+       agent "{\"type\":\"ACTIVITY_DELTA\",\"messageId\":\"a\",\"activityType\":\"a2ui-surface\",\"patch\":[{\"op\":\"add\",\"path\":\"/a2ui_operations/-\",\"value\":{\"version\":\"v0.9\",\"updateComponents\":{\"surfaceId\":\"d\",\"components\":[{\"id\":\"root\",\"component\":\"Text\",\"text\":{\"path\":\"/name\"}}]}}}]}")
+      (should (a2ui-surface-component surface "root"))
+      (should (equal (a2ui-get surface "/name") "Bob")))))
+
 ;;;; Render failures go back to the agent
 
 (defun a2ui-agui-test--render-stream (call-id components)
@@ -316,11 +330,18 @@ fixture files FIXTURES, fed in small chunks."
                                            {\"op\":\"replace\",\"path\":\"/e/0\",\"value\":\"x\"}]")))
     (should (equal (a2ui-json-encode doc) "{\"a\":[9,2,3],\"b\":{},\"d\":1,\"e\":[\"x\",2,3]}"))
     (should-error (a2ui-agui-json-patch doc (a2ui-json-parse "[{\"op\":\"test\",\"path\":\"/d\",\"value\":2}]"))
-                  :type 'a2ui-error)))
+                  :type 'a2ui-error)
+    ;; A patch that fails part way leaves the document as it was.
+    (should-error (a2ui-agui-json-patch doc (a2ui-json-parse
+                                             "[{\"op\":\"replace\",\"path\":\"/d\",\"value\":5},
+                                               {\"op\":\"test\",\"path\":\"/d\",\"value\":6}]")))
+    (should (equal (a2ui-json-encode doc) "{\"a\":[9,2,3],\"b\":{},\"d\":1,\"e\":[\"x\",2,3]}"))))
 
 (ert-deftest a2ui-agui-curl-config-quoting ()
   (should (equal (a2ui-agui--curl-config "http://h/x" '(("Authorization" . "Bearer a\"b\\c")))
-                 "url = \"http://h/x\"\nheader = \"Authorization: Bearer a\\\"b\\\\c\"\n")))
+                 "url = \"http://h/x\"\nheader = \"Authorization: Bearer a\\\"b\\\\c\"\n"))
+  ;; A line break cannot smuggle in another option.
+  (should-error (a2ui-agui--curl-config "http://h/x" '(("X" . "a\noutput = /tmp/x")))))
 
 (ert-deftest a2ui-agui-header-functions ()
   (let ((headers (a2ui-agui--headers (list :url "http://h" :headers '(("X-Token" . (lambda (c) (plist-get c :url))))))))

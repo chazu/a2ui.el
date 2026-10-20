@@ -139,6 +139,7 @@ It returns the process, or nil, and feeds the response to
   (state (make-hash-table :test 'equal))
   (tool-calls (make-hash-table :test 'equal)) ; id -> plist
   (activities (make-hash-table :test 'equal)) ; messageId -> content
+  (applied (make-hash-table :test 'equal)) ; messageId -> operations applied
   interrupts                            ; pending interrupt objects
   resolutions                           ; interrupt id -> resume entry
   process run-id status
@@ -444,10 +445,19 @@ of the surfaces touched."
         (and (vectorp ops) ops)))))
 
 (defun a2ui-agui--activity (agent message-id content)
-  "Show the a2ui-surface activity MESSAGE-ID of AGENT, now CONTENT."
+  "Show the a2ui-surface activity MESSAGE-ID of AGENT, now CONTENT.
+Snapshots and deltas carry every operation so far; only those not
+applied yet are, so a resent data update does not undo the user's
+edits, and a long stream is not validated again and again."
   (puthash message-id content (a2ui-agui-agent-activities agent))
   (if-let* ((ops (a2ui-agui--operations-in content)))
-      (a2ui-agui--apply-operations agent ops)
+      (let* ((done (gethash message-id (a2ui-agui-agent-applied agent)))
+             (n (if (and (<= (length done) (length ops))
+                         (cl-every #'a2ui-agui--json-equal done ops))
+                    (length done)
+                  0)))
+        (puthash message-id ops (a2ui-agui-agent-applied agent))
+        (a2ui-agui--apply-operations agent (seq-drop ops n)))
     (pcase (and (hash-table-p content) (gethash "status" content))
       ("failed" (a2ui-agui--text agent "status"
                                  (format "[A2UI render failed: %s]"
@@ -678,16 +688,19 @@ Return (EVENTS . REST): EVENTS lists the data strings of complete
 events in order, and REST is the unfinished tail to pass as PENDING
 next time.  Comments and fields other than `data' are ignored; an
 event's `data' lines are joined with newlines."
-  (let ((text (string-replace "\r" "" (concat pending chunk)))
-        (start 0) end events)
-    (while (setq end (string-search "\n\n" text start))
+  (let* ((text (concat pending (string-replace "\r" "" chunk)))
+         ;; PENDING holds no blank line: search only where CHUNK joins
+         ;; it, so a large event arriving in many chunks is scanned once
+         (from (max 0 (1- (length pending))))
+         (start 0) end events)
+    (while (setq end (string-search "\n\n" text from))
       (let (data)
         (dolist (line (split-string (substring text start end) "\n"))
           (when (string-prefix-p "data:" line)
             (push (string-remove-prefix " " (substring line 5)) data)))
         (when data
           (push (string-join (nreverse data) "\n") events)))
-      (setq start (+ end 2)))
+      (setq start (+ end 2) from start))
     (cons (nreverse events) (substring text start))))
 
 (defun a2ui-agui-receive (agent chunk)
@@ -721,7 +734,11 @@ ERROR-TEXT is what curl or the server said on failure."
 (defun a2ui-agui--curl-config (url headers)
   "Return a curl config for URL and the alist HEADERS, read from stdin.
 Keeping headers off the command line keeps tokens out of `ps'."
-  (let ((q (lambda (s) (concat "\"" (replace-regexp-in-string "[\"\\\\]" "\\\\\\&" s) "\""))))
+  (let ((q (lambda (s)
+             ;; A line break would end the option and start another
+             (when (string-match-p "[\r\n]" s)
+               (error "A URL or header holds a line break"))
+             (concat "\"" (replace-regexp-in-string "[\"\\]" "\\\\\\&" s) "\""))))
     (concat (format "url = %s\n" (funcall q url))
             (mapconcat (lambda (h) (format "header = %s\n" (funcall q (format "%s: %s" (car h) (cdr h)))))
                        headers ""))))
@@ -821,9 +838,20 @@ Keeping headers off the command line keeps tokens out of `ps'."
         ((and (numberp a) (numberp b)) (= a b))
         (t (equal a b))))
 
+(defun a2ui-agui--json-copy (value)
+  "Return a deep copy of the parsed JSON VALUE."
+  (cond ((hash-table-p value)
+         (let ((copy (copy-hash-table value)))
+           (maphash (lambda (k v) (puthash k (a2ui-agui--json-copy v) copy)) copy)
+           copy))
+        ((vectorp value) (vconcat (mapcar #'a2ui-agui--json-copy value)))
+        (t value)))
+
 (defun a2ui-agui-json-patch (doc patch)
   "Apply the RFC 6902 JSON PATCH, a vector of operations, to DOC.
-Return the new document; DOC may be modified."
+Return the new document.  DOC is left as it was, also when an
+operation fails: a patch applies whole or not at all."
+  (setq doc (a2ui-agui--json-copy doc))
   (seq-doseq (op patch)
     (let ((path (a2ui-pointer-segments (gethash "path" op)))
           (from (gethash "from" op)))
@@ -947,8 +975,9 @@ NAME is a key of `a2ui-agui-agents', or an AG-UI endpoint URL."
   (if-let* ((agent a2ui-agui-current-agent)
             (proc (a2ui-agui-agent-process agent)))
       (progn (setf (a2ui-agui-agent-finished agent) t)
-             (delete-process proc)
+             ;; Before deleting: the sentinel runs at once and reads it
              (a2ui-agui--status agent "aborted")
+             (delete-process proc)
              (a2ui-agui--text agent "status" "[aborted]"))
     (message "No run in progress")))
 

@@ -161,6 +161,20 @@
       (should (string-match-p "\"status\":\"waiting\"" result))
       (should-not (a2ui-tools-host-waiters host)))))
 
+(ert-deftest a2ui-hosts-await-caller-gone ()
+  ;; An await whose client gave up does not take the next press.
+  (let ((host (a2ui-hosts-test--host))
+        (live t)
+        abandoned)
+    (a2ui-hosts-test--call host "render_a2ui" a2ui-hosts-test--form)
+    (let ((a2ui-tools-caller-live-p (lambda () live)))
+      (a2ui-tools-call host "a2ui_await_action" (a2ui-obj "surfaceId" "f") (lambda (r) (setq abandoned r))))
+    (setq live nil)
+    (let ((inhibit-message t)) (a2ui-hosts-test--press host "f" "go"))
+    (should-not abandoned)
+    (should-not (a2ui-tools-host-waiters host))
+    (should (string-match-p "action \"submit\"" (a2ui-hosts-test--call host "a2ui_await_action" "{}")))))
+
 (ert-deftest a2ui-hosts-await-ends-when-closed ()
   (let ((host (a2ui-hosts-test--host))
         result)

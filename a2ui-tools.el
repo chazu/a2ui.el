@@ -72,8 +72,14 @@ A renderer adds itself here, e.g. `a2ui-vui-attach'.")
   "One conversation's A2UI session and how its actions reach the model."
   name session deliver
   (queue nil)                           ; undelivered action texts, oldest first
-  (waiters nil)                         ; (SURFACE-ID . CALLBACK) of awaits
+  (waiters nil)                         ; (SURFACE-ID CALLBACK LIVE-P) of awaits
   (failed nil))                         ; (SURFACE-ID . ERRORS) of rejected renders
+
+(defvar a2ui-tools-caller-live-p nil
+  "Function telling whether the caller of the tool now running still waits.
+A transport binds it while it runs a tool call, so an a2ui_await_action
+its client gave up on does not take the user's next action.  Nil means
+the caller is assumed to wait.")
 
 (defvar a2ui-tools--errors t
   "Errors collected while a tool call applies messages, or t when not.")
@@ -124,17 +130,21 @@ a2ui_await_action is waiting for it."
   (dolist (waiter (a2ui-tools-host-waiters host))
     (when (equal (car waiter) surface-id)
       (setf (a2ui-tools-host-waiters host) (delq waiter (a2ui-tools-host-waiters host)))
-      (funcall (cdr waiter) (a2ui-tools--result "closed" "surfaceId" surface-id
+      (funcall (nth 1 waiter) (a2ui-tools--result "closed" "surfaceId" surface-id
                                                 "note" "The user closed this surface.")))))
 
 (defun a2ui-tools--deliver (host surface-id text)
   "Give the action TEXT from SURFACE-ID to HOST's model.
 A waiting a2ui_await_action for that surface (or any surface) gets it
-first, then the host's DELIVER function; otherwise it is queued."
+first, then the host's DELIVER function; otherwise it is queued.
+Waiters whose caller has gone are dropped."
+  (setf (a2ui-tools-host-waiters host)
+        (seq-filter (pcase-lambda (`(,_ ,_ ,live-p)) (or (null live-p) (funcall live-p)))
+                    (a2ui-tools-host-waiters host)))
   (if-let* ((waiter (seq-find (lambda (w) (or (null (car w)) (equal (car w) surface-id)))
                               (a2ui-tools-host-waiters host))))
       (progn (setf (a2ui-tools-host-waiters host) (delq waiter (a2ui-tools-host-waiters host)))
-             (funcall (cdr waiter) text))
+             (funcall (nth 1 waiter) text))
     (if (a2ui-tools-host-deliver host)
         (funcall (a2ui-tools-host-deliver host) text)
       (setf (a2ui-tools-host-queue host) (append (a2ui-tools-host-queue host) (list text)))
@@ -352,8 +362,10 @@ at once instead of waiting for a press that cannot come."
                                             "hint" "The last render of this surface failed; fix it before waiting.")))
      (t
       (let* ((done nil)
-             (waiter (cons surface-id (lambda (text)
-                                        (unless done (setq done t) (funcall callback text)))))
+             (waiter (list surface-id
+                           (lambda (text)
+                             (unless done (setq done t) (funcall callback text)))
+                           a2ui-tools-caller-live-p))
              (timeout (min 600 (or (a2ui-number (gethash "timeoutSeconds" args))
                                    a2ui-tools-await-timeout))))
         (push waiter (a2ui-tools-host-waiters host))
@@ -361,7 +373,7 @@ at once instead of waiting for a press that cannot come."
                      (lambda ()
                        (unless done
                          (setf (a2ui-tools-host-waiters host) (delq waiter (a2ui-tools-host-waiters host)))
-                         (funcall (cdr waiter)
+                         (funcall (nth 1 waiter)
                                   (a2ui-tools--result "waiting" "note" "No action yet; the user may still be filling in the surface."))))))))))
 
 (defun a2ui-tools-call (host name args callback)

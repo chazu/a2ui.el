@@ -495,8 +495,14 @@ An object key is deleted; an array slot is set to nil, keeping length."
 
 ;;;; Data model access
 
+(defvar a2ui--read-function nil
+  "Function called with the absolute path of each `a2ui-get', or nil.
+A renderer binds it while rendering to learn what the render reads.")
+
 (defun a2ui-get (surface path &optional scope)
   "Return the value at PATH in SURFACE's data model, relative to SCOPE."
+  (when a2ui--read-function
+    (funcall a2ui--read-function (a2ui-pointer-resolve path scope)))
   (a2ui-pointer-get (a2ui-surface-data surface) path scope))
 
 (defun a2ui-set (surface path value &optional scope)

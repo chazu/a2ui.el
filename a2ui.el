@@ -5,7 +5,7 @@
 ;; Author: Chaz Straney <chaz.straney@gmail.com>
 ;; Maintainer: Chaz Straney <chaz.straney@gmail.com>
 ;; URL: https://github.com/chazu/a2ui.el
-;; Version: 0.1.1
+;; Version: 0.1.2
 ;; Package-Requires: ((emacs "29.1") (vui "1.4.0"))
 ;; Keywords: tools, comm
 ;; SPDX-License-Identifier: GPL-3.0-or-later
@@ -72,6 +72,24 @@
 
 ;;;; Log
 
+(defcustom a2ui-log-max-size 2000000
+  "Most characters each log buffer keeps; the oldest lines go first.
+Nil keeps everything."
+  :type '(choice (const :tag "Unlimited" nil) natnum)
+  :group 'a2ui)
+
+(defun a2ui--log-trim (&optional separator)
+  "Drop the oldest entries of the current log past `a2ui-log-max-size'.
+Entries end with SEPARATOR, a newline by default."
+  (when (and a2ui-log-max-size (> (buffer-size) a2ui-log-max-size))
+    (let ((inhibit-read-only t))
+      (delete-region (point-min)
+                     (save-excursion
+                       (goto-char (- (point-max) a2ui-log-max-size))
+                       (if (search-forward (or separator "\n") nil t)
+                           (point)
+                         (point-max)))))))
+
 (defun a2ui--log-buffer ()
   "Return the log buffer, creating it in `special-mode' if needed."
   (or (get-buffer a2ui-log-buffer-name)
@@ -104,7 +122,8 @@ METADATA is shown after outbound messages that carry it."
           (when metadata
             (insert (propertize "metadata:\n" 'face 'shadow)
                     (a2ui--pretty-json metadata) "\n"))
-          (insert "\n"))
+          (insert "\n")
+          (a2ui--log-trim "\n\n"))
         (when moving (goto-char (point-max)))))))
 
 (add-hook 'a2ui-message-functions #'a2ui--log-message)
@@ -130,7 +149,8 @@ METADATA is shown after outbound messages that carry it."
                     (format "RunAgentInput runId=%s messages=%d resume=%s"
                             (gethash "runId" object) (length (gethash "messages" object))
                             (if (gethash "resume" object) "yes" "no")))
-                  "\n"))))))
+                  "\n")
+          (a2ui--log-trim))))))
 
 (add-hook 'a2ui-agui-event-functions #'a2ui--log-agui)
 (add-hook 'a2ui-agui-session-functions #'a2ui-vui-attach)

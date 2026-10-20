@@ -94,8 +94,9 @@ When nil, each surface gets a buffer of its own."
   "Draw BUFFER's waiting surfaces of SESSION above its prompt."
   (when (buffer-live-p buffer)
     (with-current-buffer buffer
-      (when-let* ((ids (prog1 a2ui-agent-shell--pending (setq a2ui-agent-shell--pending nil)))
-                  (prompt (and comint-last-prompt (marker-position (car comint-last-prompt)))))
+      ;; With no prompt yet, the surfaces wait for the next turn's end
+      (when-let* ((prompt (and comint-last-prompt (marker-position (car comint-last-prompt))))
+                  (ids (prog1 a2ui-agent-shell--pending (setq a2ui-agent-shell--pending nil))))
         (dolist (id ids)
           (when (a2ui-session-surface session id)
             ;; Plain newlines on both sides: the shell's own text is

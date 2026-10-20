@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.2 (2026-10-20)
+
+- Typing in a text field no longer renders the whole surface again on each key, unless something else on the surface shows the value. In a 1000-row form a keystroke went from ~150–300 ms to ~1 ms.
+- A Row checks for editable widgets beneath it in linear time.
+- The AG-UI client refuses a URL or header holding a line break, which would otherwise add a line to curl's config.
+- A field that a surface shows twice (two Lists templating the same items) shows what is typed in either copy.
+- A `validationRegexp` Emacs cannot run, such as one with lookahead, is reported to the agent and passes, instead of turning the field into an error.
+- A Modal templated over a list shows the item whose trigger was pressed, not the first one opened.
+- An `a2ui_await_action` whose MCP client gave up no longer takes the user's next action; it waits for the next await.
+- AG-UI activity deltas apply only their new operations, so a resent data update no longer undoes what the user typed, and a long stream isn't validated over and over.
+- A JSON Patch (STATE_DELTA, ACTIVITY_DELTA) that fails part way leaves the state as it was.
+- Aborting an AG-UI run no longer reports a failed request first.
+- agent-shell keeps surfaces that arrive before the shell's first prompt, and shows them at the next turn's end.
+- Fetched images are kept to 50 MB, oldest first, and a failed fetch is tried again after a minute.
+- The SSE parser scans each byte once, however many chunks an event arrives in.
+- The protocol and AG-UI logs keep their last `a2ui-log-max-size` characters (2,000,000 by default).
+
 ## 0.1.1 (2026-10-20)
 
 - OrgText keeps link descriptions on Emacs 29: Org 9.6 marks them with an `invisible` value it doesn't hide, and they were stripped with the link targets.

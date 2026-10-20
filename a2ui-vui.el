@@ -178,6 +178,8 @@ does one whose type has no renderer."
             (condition-case err
                 (funcall fn c surface scope)
               (error
+               ;; What it would have read is unknown: depend on all of it
+               (when a2ui--read-function (funcall a2ui--read-function "/"))
                (message "a2ui: rendering %s failed: %s" id (error-message-string err))
                (a2ui-vui--placeholder (format "[error in %s: %s]" type
                                               (error-message-string err)))))
@@ -186,8 +188,9 @@ does one whose type has no renderer."
 (defun a2ui-vui--template-scopes (surface template scope)
   "Return the item paths of SURFACE's list that TEMPLATE binds to, in SCOPE."
   (let* ((path (a2ui-pointer-resolve (gethash "path" template) scope))
-         (items (a2ui-get surface path))
+         (items (let ((a2ui--read-function nil)) (a2ui-get surface path)))
          (base (string-remove-suffix "/" path)))
+    (a2ui-vui--record-shape path items)
     (cond ((vectorp items)
            (cl-loop for i below (length items) collect (format "%s/%d" base i)))
           ((hash-table-p items)
@@ -343,19 +346,138 @@ is shown.")
   (when-let* ((table (gethash surface a2ui-vui--touched)))
     (or (gethash :all table) (and path (gethash path table)))))
 
-(defun a2ui-vui--write (surface path value)
-  "Store VALUE at PATH of SURFACE on behalf of the user."
+(defvar a2ui-vui--writing nil
+  "The field edit being announced, or nil.
+A list (SURFACE PATH KEY FAILURES-FN VIEW); see `a2ui-vui--write'.")
+
+(defun a2ui-vui--write (surface path value &optional key failures-fn)
+  "Store VALUE at PATH of SURFACE on behalf of the user.
+KEY and FAILURES-FN are given by a text field as the user types: its
+key, and a function returning the failures it shows now.  Views whose
+last render read nothing at PATH, besides that field showing what is
+already in it, are then not rendered again."
   (when path
     (a2ui-vui--touch surface path)
-    (a2ui-set surface path value)))
+    (let ((a2ui-vui--writing
+           (and key (list surface (a2ui-vui--canonical (a2ui-pointer-resolve path))
+                          key failures-fn vui--current-instance))))
+      (a2ui-set surface path value))))
 
-(defun a2ui-vui--shown-failures (c surface scope &optional failures)
+(defun a2ui-vui--shown-failures (c surface scope &optional failures-fn)
   "Return the failing checks of input C to show on SURFACE in SCOPE.
-FAILURES defaults to C's failing checks.  An input's failures stay
-hidden until the user edits it or a submit is blocked, so a fresh
-form does not open covered in errors."
+FAILURES-FN, called with no arguments, returns the failing checks;
+it defaults to C's `checks'.  An input's failures stay hidden until
+the user edits it or a submit is blocked, so a fresh form does not
+open covered in errors."
   (when (a2ui-vui--touched-p surface (a2ui-binding-path c "value" scope))
-    (or failures (a2ui-check-failures c surface scope))))
+    (if failures-fn
+        (funcall failures-fn)
+      (a2ui-check-failures c surface scope))))
+
+;;;;; Render dependencies
+
+;; Typing in a long surface would render all of it on every key, and
+;; vui rebuilds the whole buffer to do that.  So each view records what
+;; its render read from the data model, and a keystroke renders a view
+;; again only when that view shows something the edit changed.
+
+(cl-defstruct (a2ui-vui--deps (:constructor a2ui-vui--deps-make) (:copier nil))
+  "What the last render of a view read from the data model."
+  (reads (make-hash-table :test 'equal)
+         :documentation "Path -> readers: t, or the key of a field reading its own value.")
+  (shapes (make-hash-table :test 'equal)
+          :documentation "Path of a templated list -> its size.")
+  (failures (make-hash-table :test 'equal)
+            :documentation "Key of a text field -> the failures it shows."))
+
+(defvar a2ui-vui--view-deps (make-hash-table :test 'eq :weakness 'key)
+  "View instance -> the `a2ui-vui--deps' of its last render.")
+
+(defvar a2ui-vui--recording nil
+  "The `a2ui-vui--deps' the render in progress records into, or nil.")
+
+(defvar a2ui-vui--reader t
+  "Who reads the data model now: t, or the key of a field reading its value.")
+
+(defun a2ui-vui--canonical (path)
+  "Return the absolute pointer PATH without empty segments."
+  (concat "/" (string-join (split-string path "/" t) "/")))
+
+(defun a2ui-vui--below-p (path ancestor)
+  "Return non-nil when canonical PATH lies strictly under ANCESTOR."
+  (and (not (equal path ancestor))
+       (or (equal ancestor "/") (string-prefix-p (concat ancestor "/") path))))
+
+(defun a2ui-vui--related-p (a b)
+  "Return non-nil when canonical paths A and B overlap."
+  (or (equal a b) (a2ui-vui--below-p a b) (a2ui-vui--below-p b a)))
+
+(defun a2ui-vui--size (value)
+  "Return the number of items in VALUE, or nil if it holds none."
+  (cond ((vectorp value) (length value))
+        ((hash-table-p value) (hash-table-count value))))
+
+(defun a2ui-vui--record-read (path)
+  "Record that the render in progress read PATH."
+  (let ((path (a2ui-vui--canonical path))
+        (reads (a2ui-vui--deps-reads a2ui-vui--recording)))
+    (unless (member a2ui-vui--reader (gethash path reads))
+      (push a2ui-vui--reader (gethash path reads)))))
+
+(defun a2ui-vui--record-shape (path items)
+  "Record that the render in progress templated over ITEMS at PATH."
+  (when a2ui-vui--recording
+    (puthash (a2ui-vui--canonical path) (a2ui-vui--size items)
+             (a2ui-vui--deps-shapes a2ui-vui--recording))))
+
+(defun a2ui-vui--record-failures (key failures)
+  "Record that the field with KEY shows FAILURES.
+A field a view shows twice under one key, as when two Lists template
+the same items with the same component, is marked `twice': typing in
+one copy renders the view again, to update the other."
+  (when a2ui-vui--recording
+    (let ((table (a2ui-vui--deps-failures a2ui-vui--recording)))
+      (puthash key (if (eq (gethash key table 'none) 'none) failures 'twice) table))))
+
+(defmacro a2ui-vui--recording-reads (&rest body)
+  "Run BODY, the render of the current view, recording what it reads."
+  (declare (indent 0) (debug t))
+  `(let ((a2ui-vui--recording (a2ui-vui--deps-make))
+         (a2ui--read-function #'a2ui-vui--record-read)
+         (a2ui-vui--reader t))
+     (remhash vui--current-instance a2ui-vui--view-deps)
+     (prog1 (progn ,@body)
+       (puthash vui--current-instance a2ui-vui--recording a2ui-vui--view-deps))))
+
+(defun a2ui-vui--unaffected-p (view write)
+  "Return non-nil when the field edit WRITE changes nothing VIEW shows.
+WRITE is a value of `a2ui-vui--writing'.  When in doubt, as when a
+check fails to run, return nil, so the view renders again."
+  (ignore-errors (a2ui-vui--unaffected-p-1 view write)))
+
+(defun a2ui-vui--unaffected-p-1 (view write)
+  "Do the work of `a2ui-vui--unaffected-p' for VIEW and WRITE."
+  (pcase-let ((`(,surface ,path ,key ,failures-fn ,host) write))
+    (when-let* ((deps (gethash view a2ui-vui--view-deps)))
+      ;; The field that was typed in shows the new text already
+      (let ((own (and (eq view host) key)))
+        (and (catch 'affected
+               (maphash (lambda (read readers)
+                          (when (and (a2ui-vui--related-p read path)
+                                     (cl-some (lambda (r) (not (equal r own))) readers))
+                            (throw 'affected nil)))
+                        (a2ui-vui--deps-reads deps))
+               (maphash (lambda (list size)
+                          (when (and (a2ui-vui--related-p list path)
+                                     (not (and (a2ui-vui--below-p path list)
+                                               (eql size (a2ui-vui--size
+                                                          (a2ui-get surface list))))))
+                            (throw 'affected nil)))
+                        (a2ui-vui--deps-shapes deps))
+               t)
+             (or (not own)
+                 (equal (gethash key (a2ui-vui--deps-failures deps) 'unknown)
+                        (funcall failures-fn))))))))
 
 ;;;; Basic catalog
 
@@ -388,33 +510,37 @@ vui composes a wrapped row with multi-line children as plain text,
 which keeps buttons working but drops widgets, so a Row holding any
 of these stacks instead.")
 
-(defun a2ui-vui--descendants (component surface scope)
-  "Return the components under COMPONENT on SURFACE in SCOPE, deepest last."
-  (let (seen out (queue (list (cons component scope))))
-    (while queue
-      (pcase-let ((`(,c . ,sc) (pop queue)))
-        (dolist (ref (append (a2ui-vui-child-ids c surface sc)
-                             (mapcar (lambda (prop) (cons (gethash prop c) sc))
-                                     '("child" "trigger" "content"))
-                             (cl-loop for tab across (let ((tabs (gethash "tabs" c)))
-                                                       (if (vectorp tabs) tabs []))
-                                      when (hash-table-p tab)
-                                      collect (cons (gethash "child" tab) sc))))
-          (let ((child (and (stringp (car ref)) (a2ui-surface-component surface (car ref)))))
-            (when (and child (not (member ref seen)))
-              (push ref seen)
-              (push child out)
-              (setq queue (append queue (list (cons child (cdr ref))))))))))
-    (nreverse out)))
+(defun a2ui-vui--some-descendant (pred component surface scope)
+  "Return a component under COMPONENT satisfying PRED, or nil.
+SURFACE and SCOPE are where COMPONENT renders.  Each component is
+visited once in each scope it renders in."
+  (let ((seen (make-hash-table :test 'equal))
+        (stack (list (cons component scope))))
+    (catch 'found
+      (while stack
+        (pcase-let ((`(,c . ,sc) (pop stack)))
+          (dolist (ref (append (a2ui-vui-child-ids c surface sc)
+                               (mapcar (lambda (prop) (cons (gethash prop c) sc))
+                                       '("child" "trigger" "content"))
+                               (cl-loop for tab across (let ((tabs (gethash "tabs" c)))
+                                                         (if (vectorp tabs) tabs []))
+                                        when (hash-table-p tab)
+                                        collect (cons (gethash "child" tab) sc))))
+            (let ((child (and (stringp (car ref)) (a2ui-surface-component surface (car ref)))))
+              (when (and child (not (gethash ref seen)))
+                (puthash ref t seen)
+                (when (funcall pred child) (throw 'found child))
+                (push (cons child (cdr ref)) stack)))))))))
 
 (defun a2ui-vui--widget-free-p (component surface scope)
   "Return non-nil when nothing under COMPONENT renders an editable widget.
 SURFACE and SCOPE are where COMPONENT renders.  A longText field
 renders as text and an Edit button, so it counts as widget-free."
-  (cl-notany (lambda (c)
-               (and (member (gethash "component" c) a2ui-vui--field-types)
-                    (not (equal (gethash "variant" c) "longText"))))
-             (a2ui-vui--descendants component surface scope)))
+  (not (a2ui-vui--some-descendant
+        (lambda (c)
+          (and (member (gethash "component" c) a2ui-vui--field-types)
+               (not (equal (gethash "variant" c) "longText"))))
+        component surface scope)))
 
 (defconst a2ui-vui--single-line-types
   '("Text" "Icon" "Button" "CheckBox" "Image" "Video" "AudioPlayer"
@@ -580,25 +706,49 @@ renderer, not to the data model the agent sees."
                     (vui-button "Open" :key (concat (a2ui-vui-key c scope) "/open")
                       :on-click (a2ui-vui--modal-opener surface c scope)))))))
 
+(defun a2ui-vui--text-field-failures (c surface scope)
+  "Return the failures TextField C on SURFACE shows in SCOPE."
+  (a2ui-vui--shown-failures
+   c surface scope
+   (lambda ()
+     (let ((regexp (gethash "validationRegexp" c)))
+       (append (a2ui-check-failures c surface scope)
+               (and (stringp regexp)
+                    (not (a2ui-vui--regexp-matches-p
+                          surface (gethash "id" c) regexp
+                          (a2ui-vui--string c "value" surface scope)))
+                    (list "Invalid format.")))))))
+
+(defun a2ui-vui--regexp-matches-p (surface id regexp value)
+  "Return non-nil when VALUE matches the JavaScript REGEXP.
+A pattern Emacs cannot run, such as one with lookahead, is reported
+to SURFACE's agent as an error in component ID, and passes."
+  (condition-case err
+      (string-match-p (a2ui-js-regex-to-emacs regexp) value)
+    (a2ui-error
+     (a2ui-report-validation-error surface (format "/components/%s/validationRegexp" id)
+                                   (error-message-string err))
+     t)))
+
 (a2ui-define-component basic "TextField" (c surface scope)
   (let* ((path (a2ui-binding-path c "value" scope))
-         (regexp (gethash "validationRegexp" c))
-         (value (a2ui-vui--string c "value" surface scope))
-         (failures (append (a2ui-check-failures c surface scope)
-                           (and (stringp regexp)
-                                (not (string-match-p (a2ui-js-regex-to-emacs regexp) value))
-                                (list "Invalid format.")))))
+         (key (a2ui-vui-key c scope))
+         (failures-fn (lambda () (a2ui-vui--text-field-failures c surface scope)))
+         ;; Read as the field's own: typing in it changes neither
+         (value (let ((a2ui-vui--reader key)) (a2ui-vui--string c "value" surface scope)))
+         (failures (let ((a2ui-vui--reader key)) (funcall failures-fn))))
+    (a2ui-vui--record-failures key failures)
     (vui-vstack
      (if (equal (gethash "variant" c) "longText")
          (a2ui-vui--long-text c surface scope path value)
        (vui-hstack
         (a2ui-vui--label-prefix c surface scope)
-        (vui-field :key (a2ui-vui-key c scope)
+        (vui-field :key key
                    :value value
                    :size a2ui-vui-field-width
                    :secret (equal (gethash "variant" c) "obscured")
-                   :on-change (lambda (v) (a2ui-vui--write surface path v)))))
-     (a2ui-vui--failures (a2ui-vui--shown-failures c surface scope failures)))))
+                   :on-change (lambda (v) (a2ui-vui--write surface path v key failures-fn)))))
+     (a2ui-vui--failures failures))))
 
 (a2ui-define-component basic "CheckBox" (c surface scope)
   (let ((path (a2ui-binding-path c "value" scope)))
@@ -806,7 +956,34 @@ GLYPH marks the link, labelled KIND when C has no description."
 ;;;;; Images
 
 (defvar a2ui-vui--images (make-hash-table :test 'equal)
-  "URL -> fetched image bytes, `loading' or `failed'.")
+  "URL -> fetched image bytes, `loading', or (failed . TIME), oldest first.")
+
+(defconst a2ui-vui--image-cache-bytes (* 50 1024 1024)
+  "How many bytes of fetched images to keep; the oldest go first.")
+
+(defconst a2ui-vui--image-retry-seconds 60
+  "How long a failed image fetch shows as failed before it is tried again.")
+
+(defun a2ui-vui--cached-image (url)
+  "Return the bytes fetched from URL, `loading', `failed', or nil."
+  (pcase (gethash url a2ui-vui--images)
+    (`(failed . ,time) (and (< (- (float-time) time) a2ui-vui--image-retry-seconds)
+                            'failed))
+    (value value)))
+
+(defun a2ui-vui--cache-image (url value)
+  "Remember VALUE fetched from URL, forgetting the oldest images past the budget."
+  (remhash url a2ui-vui--images)
+  (puthash url value a2ui-vui--images)
+  (let ((total 0) old)
+    (maphash (lambda (k v) (when (stringp v)
+                             (cl-incf total (length v))
+                             (push k old)))
+             a2ui-vui--images)
+    (dolist (k (nreverse old))
+      (when (> total a2ui-vui--image-cache-bytes)
+        (cl-decf total (length (gethash k a2ui-vui--images)))
+        (remhash k a2ui-vui--images)))))
 
 (defun a2ui-vui--data-url-bytes (url)
   "Return the decoded bytes of URL if it is a base64 data: image URL."
@@ -825,11 +1002,10 @@ GLYPH marks the link, labelled KIND when C has no description."
                              (re-search-forward "\r?\n\r?\n" nil t))
                       (buffer-substring-no-properties (point) (point-max)))))
        (kill-buffer)
-       (puthash url (if (and data (<= (length data) a2ui-vui-image-max-bytes)
-                             (image-type-from-data data))
-                        data
-                      'failed)
-                a2ui-vui--images)
+       (a2ui-vui--cache-image url (if (and data (<= (length data) a2ui-vui-image-max-bytes)
+                                           (image-type-from-data data))
+                                      data
+                                    (cons 'failed (float-time))))
        (a2ui-vui-refresh surface)))
    nil t t))
 
@@ -859,7 +1035,7 @@ LABEL describes it, for `help-echo' and where images cannot show."
          (label (if (string-empty-p description) "Image" description))
          (inline (and a2ui-vui-inline-images (not (string-empty-p url)) (display-images-p)))
          (web (string-match-p "\\`https?://" url))
-         (data (and inline (or (a2ui-vui--data-url-bytes url) (and web (gethash url a2ui-vui--images)))))
+         (data (and inline (or (a2ui-vui--data-url-bytes url) (and web (a2ui-vui--cached-image url)))))
          (link (lambda () (a2ui-vui--media c surface scope "▣" "Image"))))
     (cond
      ((stringp data) (or (a2ui-vui--image-vnode c data label scope) (funcall link)))
@@ -973,7 +1149,7 @@ Return non-nil if there were any."
     (dolist (view (gethash session a2ui-vui--extra-views))
       (when (equal (car view) surface-id)
         (setq found t)
-        (funcall (cdr view))))
+        (funcall (cdr view) a2ui-vui--writing)))
     found))
 
 (defun a2ui-vui--on-change (session surface-id)
@@ -982,7 +1158,7 @@ A new surface goes to the session's `display-fn' when it has one, and
 to a buffer of its own otherwise."
   (let ((elsewhere (a2ui-vui--bump-extra session surface-id)))
     (if-let* ((view (a2ui-vui--view session surface-id)))
-        (funcall (cdr view))
+        (funcall (cdr view) a2ui-vui--writing)
       (when (and a2ui-vui-auto-show (not elsewhere) (a2ui-session-surface session surface-id))
         (if-let* ((display (a2ui-session-display-fn session)))
             (funcall display surface-id)
@@ -1000,12 +1176,22 @@ An existing `on-change-fn' keeps being called."
               (a2ui-vui--on-change session surface-id)))))
   session)
 
+(defun a2ui-vui--bumper ()
+  "Return a function that renders the view being mounted again.
+Given a field edit (see `a2ui-vui--writing'), the function does
+nothing when the edit changes nothing the view shows."
+  (let ((view vui--current-instance)
+        (bump (vui-with-async-context (vui-set-state :tick #'1+))))
+    (lambda (&optional write)
+      (unless (and write (a2ui-vui--unaffected-p view write))
+        (funcall bump)))))
+
 (vui-defcomponent a2ui-vui-surface-view (session surface-id)
   :state ((tick 0))
   :on-mount
   (progn
     (puthash surface-id
-             (cons (current-buffer) (vui-with-async-context (vui-set-state :tick #'1+)))
+             (cons (current-buffer) (a2ui-vui--bumper))
              (gethash session a2ui-vui--views))
     (lambda ()
       (when-let* ((views (gethash session a2ui-vui--views)))
@@ -1013,11 +1199,12 @@ An existing `on-change-fn' keeps being called."
   :render
   (let ((surface (a2ui-session-surface session surface-id)))
     (ignore tick)
-    (cond ((null surface)
-           (vui-text (format "Surface %s was deleted." surface-id) :face 'shadow))
-          ((a2ui-surface-component surface "root")
-           (a2ui-vui-render surface "root" nil))
-          (t (vui-text "Waiting for agent…" :face 'shadow)))))
+    (a2ui-vui--recording-reads
+      (cond ((null surface)
+             (vui-text (format "Surface %s was deleted." surface-id) :face 'shadow))
+            ((a2ui-surface-component surface "root")
+             (a2ui-vui-render surface "root" nil))
+            (t (vui-text "Waiting for agent…" :face 'shadow))))))
 
 (defvar-local a2ui-vui-session nil
   "The session whose surface this buffer shows.")
@@ -1105,7 +1292,7 @@ Insertion at either edge of a view is outside it."
 (vui-defcomponent a2ui-vui-inline-view (session surface-id properties newline)
   :state ((tick 0))
   :on-mount
-  (let ((view (cons surface-id (vui-with-async-context (vui-set-state :tick #'1+)))))
+  (let ((view (cons surface-id (a2ui-vui--bumper))))
     (push view (gethash session a2ui-vui--extra-views))
     (a2ui-vui--mark-inline properties)
     (lambda () (puthash session (delq view (gethash session a2ui-vui--extra-views)) a2ui-vui--extra-views)))
@@ -1117,11 +1304,12 @@ Insertion at either edge of a view is outside it."
      (when newline (vui-newline))
      (vui-vstack
       (vui-text (format "┌─ %s" surface-id) :face 'a2ui-rule)
-      (cond ((null surface)
-             (vui-text (format "Surface %s was deleted." surface-id) :face 'shadow))
-            ((a2ui-surface-component surface "root")
-             (a2ui-vui-render surface "root" nil))
-            (t (vui-text "Waiting for agent…" :face 'shadow)))
+      (a2ui-vui--recording-reads
+        (cond ((null surface)
+               (vui-text (format "Surface %s was deleted." surface-id) :face 'shadow))
+              ((a2ui-surface-component surface "root")
+               (a2ui-vui-render surface "root" nil))
+              (t (vui-text "Waiting for agent…" :face 'shadow))))
       (vui-text "└─" :face 'a2ui-rule))
      (vui-newline))))
 
@@ -1161,15 +1349,16 @@ take precedence."
 (vui-defcomponent a2ui-vui-modal-view (session surface-id content scope)
   :state ((tick 0))
   :on-mount
-  (let ((modal (cons surface-id (vui-with-async-context (vui-set-state :tick #'1+)))))
+  (let ((modal (cons surface-id (a2ui-vui--bumper))))
     (push modal (gethash session a2ui-vui--extra-views))
     (lambda () (puthash session (delq modal (gethash session a2ui-vui--extra-views)) a2ui-vui--extra-views)))
   :render
   (let ((surface (a2ui-session-surface session surface-id)))
     (ignore tick)
-    (if surface
-        (a2ui-vui-render surface content scope)
-      (vui-text (format "Surface %s was deleted." surface-id) :face 'shadow))))
+    (a2ui-vui--recording-reads
+      (if surface
+          (a2ui-vui-render surface content scope)
+        (vui-text (format "Surface %s was deleted." surface-id) :face 'shadow)))))
 
 (defun a2ui-modal-close ()
   "Close this modal."
@@ -1191,6 +1380,9 @@ Edits go to the surface's data model as in the surface itself.
     (setq-local revert-buffer-function #'a2ui-surface-refresh)
     (setq header-line-format '(:eval (a2ui-vui--header-line)))))
 
+(defvar-local a2ui-vui--modal-content nil
+  "The (CONTENT . SCOPE) this Modal popup shows.")
+
 (defun a2ui-vui-open-modal (surface modal-id content scope)
   "Show component CONTENT of SURFACE, in SCOPE, as Modal MODAL-ID's popup.
 The popup shows live data and closes with \\<a2ui-modal-mode-map>\\[a2ui-modal-close].
@@ -1199,11 +1391,17 @@ Return its buffer."
          (surface-id (a2ui-surface-id surface))
          (name (format "*a2ui: %s/%s*" surface-id modal-id))
          (buffer (get-buffer name)))
+    ;; A templated trigger opens the same Modal for another item
+    (when (and (buffer-live-p buffer)
+               (not (equal (buffer-local-value 'a2ui-vui--modal-content buffer)
+                           (cons content scope))))
+      (kill-buffer buffer))
     (unless (buffer-live-p buffer)
       (setq buffer (get-buffer-create name))
       (with-current-buffer buffer
         (setq a2ui-vui-session session
-              a2ui-vui-surface-id surface-id)
+              a2ui-vui-surface-id surface-id
+              a2ui-vui--modal-content (cons content scope))
         (vui-render (vui-component 'a2ui-vui-modal-view
                                    :session session :surface-id surface-id
                                    :content content :scope scope)

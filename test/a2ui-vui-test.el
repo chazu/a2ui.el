@@ -347,6 +347,23 @@ The golden file holds each surface's text and the a2ui faces in it."
       (when (get-buffer a2ui-log-buffer-name)
         (kill-buffer a2ui-log-buffer-name)))))
 
+(ert-deftest a2ui-vui-log-is-trimmed ()
+  (let ((a2ui-log-messages t)
+        (a2ui-log-max-size 2000)
+        (a2ui-log-buffer-name " *a2ui-test-log*")
+        (session (a2ui-session-create :name "test-agent")))
+    (unwind-protect
+        (progn
+          (dotimes (i 50)
+            (a2ui--log-message 'in session (a2ui-obj "n" i) nil))
+          (with-current-buffer a2ui-log-buffer-name
+            (should (<= (buffer-size) 2000))
+            ;; Whole lines go, and the newest stays.
+            (should (string-match-p "\\`[0-9]" (buffer-string)))
+            (should (string-match-p "\"n\": 49" (buffer-string)))))
+      (when (get-buffer a2ui-log-buffer-name)
+        (kill-buffer a2ui-log-buffer-name)))))
+
 (ert-deftest a2ui-vui-replay-file ()
   (let ((a2ui-log-messages nil)
         (session (a2ui-replay-file (expand-file-name "../examples/contact-form.jsonl" a2ui-vui-test--dir))))
@@ -403,6 +420,26 @@ The golden file holds each surface's text and the a2ui faces in it."
     (should (string-match-p "first tab" (a2ui-vui-test--text buffer)))
     ;; Switching tabs is view state: nothing goes to the agent.
     (should-not (a2ui-vui-test--actions))))
+
+(ert-deftest a2ui-vui-modal-per-item ()
+  ;; A Modal templated over a list shows the item whose trigger was pressed.
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
+                                                (concat "[{\"id\":\"root\",\"component\":\"List\",\"children\":{\"path\":\"/people\",\"componentId\":\"modal\"}},"
+                                                        "{\"id\":\"modal\",\"component\":\"Modal\",\"trigger\":\"open\",\"content\":\"who\"},"
+                                                        "{\"id\":\"open_l\",\"component\":\"Text\",\"text\":{\"path\":\"name\"}},"
+                                                        "{\"id\":\"open\",\"component\":\"Button\",\"child\":\"open_l\",\"action\":{\"event\":{\"name\":\"open\"}}},"
+                                                        "{\"id\":\"who\",\"component\":\"Text\",\"text\":{\"path\":\"name\"}}]")
+                                                "{\"people\":[{\"name\":\"Alice\"},{\"name\":\"Bob\"}]}"))
+    (save-window-excursion
+      (unwind-protect
+          (dolist (item '(("/people/0" . "Alice") ("/people/1" . "Bob")))
+            (with-current-buffer buffer
+              (a2ui-vui-test--press (concat "open@" (car item))))
+            (let ((modal (get-buffer "*a2ui: s/modal*")))
+              (a2ui-vui-test--settle modal)
+              (should (equal (string-trim (a2ui-vui-test--text modal)) (cdr item)))))
+        (when-let* ((modal (get-buffer "*a2ui: s/modal*")))
+          (kill-buffer modal))))))
 
 (ert-deftest a2ui-vui-modal-opens-and-binds ()
   (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--catalog "Modal"))
@@ -503,6 +540,113 @@ The golden file holds each surface's text and the a2ui faces in it."
       (a2ui-vui-test--type "name@/people/1" "Robert")
       (should (equal (a2ui-get surface "/people/1/name") "Robert"))
       (should (equal (a2ui-get surface "/people/0/name") "Alice")))))
+
+(defun a2ui-vui-test--count-renders (fn)
+  "Call FN and return how many times it rendered a root component."
+  (let* ((count 0)
+         (counter (lambda (_surface id &optional _scope)
+                    (when (equal id "root") (cl-incf count)))))
+    (advice-add 'a2ui-vui-render :before counter)
+    (unwind-protect (funcall fn)
+      (advice-remove 'a2ui-vui-render counter))
+    count))
+
+(ert-deftest a2ui-vui-typing-renders-only-what-changes ()
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
+                                                (concat "[{\"id\":\"root\",\"component\":\"Column\",\"children\":[\"a\",\"b\",\"mirror\",\"rows\"]},"
+                                                        "{\"id\":\"a\",\"component\":\"TextField\",\"label\":\"A\",\"value\":{\"path\":\"/a\"},"
+                                                        "\"checks\":[{\"condition\":{\"call\":\"length\",\"args\":{\"value\":{\"path\":\"/a\"},\"max\":3}},\"message\":\"Too long.\"}]},"
+                                                        "{\"id\":\"b\",\"component\":\"TextField\",\"label\":\"B\",\"value\":{\"path\":\"/b\"}},"
+                                                        "{\"id\":\"mirror\",\"component\":\"Text\",\"text\":{\"path\":\"/b\"}},"
+                                                        "{\"id\":\"rows\",\"component\":\"List\",\"children\":{\"path\":\"/people\",\"componentId\":\"name\"}},"
+                                                        "{\"id\":\"name\",\"component\":\"TextField\",\"label\":\"Name\",\"value\":{\"path\":\"name\"}}]")
+                                                "{\"a\":\"\",\"b\":\"\",\"people\":[{\"name\":\"Alice\"},{\"name\":\"Bob\"}]}"))
+    (let ((surface (a2ui-session-surface session "s"))
+          (type (lambda (key text)
+                  (a2ui-vui-test--count-renders
+                   (lambda ()
+                     (a2ui-vui-test--type key text)
+                     (a2ui-vui-test--settle buffer))))))
+      ;; Nothing else shows /a and its check still passes: no render.
+      (should (= 0 (funcall type "a@" "abc")))
+      (should (equal (a2ui-get surface "/a") "abc"))
+      (should (string-match-p "A: abc" (a2ui-vui-test--text buffer)))
+      ;; Its failure appears, and goes again.
+      (should (< 0 (funcall type "a@" "abcd")))
+      (should (string-match-p "Too long\\." (a2ui-vui-test--text buffer)))
+      (should (< 0 (funcall type "a@" "ab")))
+      (should-not (string-match-p "Too long\\." (a2ui-vui-test--text buffer)))
+      ;; A Text shows /b: typing in B renders it.
+      (should (< 0 (funcall type "b@" "hello")))
+      (should (string-match-p "^hello$" (a2ui-vui-test--text buffer)))
+      ;; A row of a template keeps the list's size: no render.
+      (should (= 0 (funcall type "name@/people/1" "Robert")))
+      (should (equal (a2ui-get surface "/people/1/name") "Robert"))
+      ;; An agent's update renders as before.
+      (a2ui-apply-message session "{\"version\":\"v0.9\",\"updateDataModel\":{\"surfaceId\":\"s\",\"path\":\"/a\",\"value\":\"zz\"}}")
+      (a2ui-vui-test--settle buffer)
+      (should (string-match-p "A: zz" (a2ui-vui-test--text buffer))))))
+
+(ert-deftest a2ui-vui-typing-renders-copies ()
+  ;; Two Lists template the same items with the same field: typing in
+  ;; one copy shows in the other.
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
+                                                (concat "[{\"id\":\"root\",\"component\":\"Column\",\"children\":[\"l1\",\"l2\"]},"
+                                                        "{\"id\":\"l1\",\"component\":\"List\",\"children\":{\"path\":\"/people\",\"componentId\":\"name\"}},"
+                                                        "{\"id\":\"l2\",\"component\":\"List\",\"children\":{\"path\":\"/people\",\"componentId\":\"name\"}},"
+                                                        "{\"id\":\"name\",\"component\":\"TextField\",\"label\":\"N\",\"value\":{\"path\":\"name\"}}]")
+                                                "{\"people\":[{\"name\":\"Al\"}]}"))
+    (a2ui-vui-test--type "name@/people/0" "Robert")
+    (a2ui-vui-test--settle buffer)
+    (should-not (string-match-p "N: Al\\b" (a2ui-vui-test--text buffer)))))
+
+(ert-deftest a2ui-vui-text-field-unsupported-regexp ()
+  ;; Emacs has no lookahead: the pattern is reported and passes.
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
+                                                (concat "[{\"id\":\"root\",\"component\":\"TextField\",\"label\":\"P\",\"value\":{\"path\":\"/p\"},"
+                                                        "\"validationRegexp\":\"^(?=.*\\\\d).{8,}$\"}]")
+                                                "{\"p\":\"\"}"))
+    (a2ui-vui-test--type "root@" "secret")
+    (a2ui-vui-test--settle buffer)
+    (should (string-match-p "P: secret" (a2ui-vui-test--text buffer)))
+    (should-not (string-match-p "error\\|Invalid" (a2ui-vui-test--text buffer)))
+    (should (seq-some (lambda (e) (string-match-p "validationRegexp" (or (gethash "path" e) "")))
+                      (a2ui-vui-test--errors)))))
+
+(ert-deftest a2ui-vui-typing-renders-dependents ()
+  ;; A Button checking a field's value is rendered as the user types.
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
+                                                (concat "[{\"id\":\"root\",\"component\":\"Column\",\"children\":[\"a\",\"go\"]},"
+                                                        "{\"id\":\"a\",\"component\":\"TextField\",\"label\":\"A\",\"value\":{\"path\":\"/a\"}},"
+                                                        "{\"id\":\"go_l\",\"component\":\"Text\",\"text\":\"Go\"},"
+                                                        "{\"id\":\"go\",\"component\":\"Button\",\"child\":\"go_l\",\"action\":{\"event\":{\"name\":\"go\"}},"
+                                                        "\"checks\":[{\"condition\":{\"call\":\"required\",\"args\":{\"value\":{\"path\":\"/a\"}}},\"message\":\"Need A.\"}]}]")
+                                                "{\"a\":\"\"}"))
+    (let ((inactive (lambda ()
+                      (vui-goto-key "go@")
+                      (eq (get-text-property (point) 'face) 'a2ui-button-inactive))))
+      (should (funcall inactive))
+      (should (< 0 (a2ui-vui-test--count-renders
+                    (lambda ()
+                      (a2ui-vui-test--type "a@" "x")
+                      (a2ui-vui-test--settle buffer)))))
+      (should-not (funcall inactive)))))
+
+(ert-deftest a2ui-vui-typing-renders-other-views ()
+  ;; The same surface inline elsewhere shows what is typed here.
+  (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--surface-messages
+                                                (concat "[{\"id\":\"root\",\"component\":\"Column\",\"children\":[\"a\"]},"
+                                                        "{\"id\":\"a\",\"component\":\"TextField\",\"label\":\"A\",\"value\":{\"path\":\"/a\"}}]")
+                                                "{\"a\":\"\"}"))
+    (with-temp-buffer
+      (let ((instance (a2ui-vui-insert-surface session "s")))
+        (a2ui-vui-test--settle-inline instance)
+        (with-current-buffer buffer
+          (a2ui-vui-test--type "a@" "typed")
+          (a2ui-vui-test--settle buffer))
+        (a2ui-vui-test--settle-inline instance)
+        (should (string-match-p "A: typed"
+                                (buffer-substring-no-properties (point-min) (point-max))))))))
 
 (ert-deftest a2ui-vui-choice-picker-single ()
   (a2ui-vui-test--with-surface (session buffer (a2ui-vui-test--catalog "ChoicePicker"))
@@ -687,6 +831,21 @@ The golden file holds each surface's text and the a2ui faces in it."
   "Return the image displayed at the start of the buffer, or nil."
   (let ((display (get-text-property (point-min) 'display)))
     (and (eq (car-safe display) 'image) display)))
+
+(ert-deftest a2ui-vui-image-cache ()
+  (let ((a2ui-vui--images (make-hash-table :test 'equal))
+        (a2ui-vui--image-cache-bytes 10))
+    ;; The oldest images go once the budget is spent.
+    (a2ui-vui--cache-image "a" "aaaa")
+    (a2ui-vui--cache-image "b" "bbbb")
+    (a2ui-vui--cache-image "c" "cccc")
+    (should-not (a2ui-vui--cached-image "a"))
+    (should (equal (a2ui-vui--cached-image "c") "cccc"))
+    ;; A failure is retried after a while.
+    (a2ui-vui--cache-image "d" (cons 'failed (float-time)))
+    (should (eq (a2ui-vui--cached-image "d") 'failed))
+    (a2ui-vui--cache-image "d" (cons 'failed (- (float-time) 3600)))
+    (should-not (a2ui-vui--cached-image "d"))))
 
 (ert-deftest a2ui-vui-image-data-url ()
   (a2ui-vui-test--with-images

@@ -169,7 +169,9 @@ downcased names and BODY a decoded string."
      ((not host) (a2ui-mcp--respond proc "404 Not Found"))
      ((equal method "DELETE") (a2ui-mcp--respond proc "200 OK"))
      ((not (equal method "POST")) (a2ui-mcp--respond proc "405 Method Not Allowed" nil '(("Allow" . "POST, DELETE"))))
-     (t (let ((message (ignore-errors (a2ui-json-parse body))))
+     (t (let ((message (ignore-errors (a2ui-json-parse body)))
+              ;; An await outlives the request when the client gives up
+              (a2ui-tools-caller-live-p (lambda () (process-live-p proc))))
           (if (vectorp message)
               ;; A batch: answer each request, together.
               (a2ui-mcp--batch proc host message)
@@ -227,7 +229,7 @@ REPLY gets nil for a notification."
                                                         asked
                                                       (car a2ui-mcp-protocol-versions))
                                   "capabilities" (a2ui-obj "tools" (a2ui-obj))
-                                  "serverInfo" (a2ui-obj "name" "a2ui" "version" "0.1.1")
+                                  "serverInfo" (a2ui-obj "name" "a2ui" "version" "0.1.2")
                                   "instructions" "Use render_a2ui to show the user interactive UI in Emacs; call a2ui_catalog first for the components.")))))
         ("ping" (funcall reply (a2ui-mcp--result id (a2ui-obj))))
         ("tools/list" (funcall reply (a2ui-mcp--result id (a2ui-obj "tools" (a2ui-mcp-tools host)))))
