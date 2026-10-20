@@ -1,0 +1,46 @@
+: keep-alive
+
+data: {"type": "RUN_STARTED", "threadId": "thr", "runId": "run-1", "input": {"forwardedProps": {"a2uiCatalogAvailable": true}}}
+
+data: {"type": "TEXT_MESSAGE_CHUNK", "messageId": "m1", "role": "assistant", "delta": "Looking up "}
+
+data: {"type": "TEXT_MESSAGE_CHUNK", "delta": "hotels."}
+
+data: {"type": "TOOL_CALL_START", "toolCallId": "gen-1", "toolCallName": "generate_a2ui", "parentMessageId": "m1"}
+
+data: {"type": "TOOL_CALL_ARGS", "toolCallId": "gen-1", "delta": "{}"}
+
+data: {"type": "TOOL_CALL_END", "toolCallId": "gen-1"}
+
+data: {"type": "ACTIVITY_SNAPSHOT", "messageId": "a2ui-surface-gen-1", "activityType": "a2ui-surface", "content": {"status": "building"}, "replace": true}
+
+data: {"type": "ACTIVITY_SNAPSHOT", "messageId": "a2ui-surface-gen-1", "activityType": "a2ui-surface", "content": {"status": "building", "progressTokens": 40}, "replace": true}
+
+data: {"type": "ACTIVITY_SNAPSHOT", "messageId": "a2ui-surface-gen-1", "activityType": "a2ui-surface", "content": {"a2ui_operations": [{"version": "v0.9", "createSurface": {"surfaceId": "hotels", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}, {"version": "v0.9", "updateComponents": {"surfaceId": "hotels", "components": [{"id": "root", "component": "List", "children": {"componentId": "card", "path": "/items"}}, {"id": "card", "component": "Row", "children": ["name", "book"]}, {"id": "name", "component": "Text", "text": {"path": "name"}}, {"id": "book_l", "component": "Text", "text": "Book"}, {"id": "book", "component": "Button", "child": "book_l", "action": {"event": {"name": "book", "context": {"hotel": {"path": "name"}}}}}]}}]}, "replace": true}
+
+data: {"type": "ACTIVITY_SNAPSHOT", "messageId": "a2ui-surface-gen-1", "activityType": "a2ui-surface", "content": {"a2ui_operations": [{"version": "v0.9", "createSurface": {"surfaceId": "hotels", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}, {"version": "v0.9", "updateComponents": {"surfaceId": "hotels", "components": [{"id": "root", "component": "List", "children": {"componentId": "card", "path": "/items"}}, {"id": "card", "component": "Row", "children": ["name", "book"]}, {"id": "name", "component": "Text", "text": {"path": "name"}}, {"id": "book_l", "component": "Text", "text": "Book"}, {"id": "book", "component": "Button", "child": "book_l", "action": {"event": {"name": "book", "context": {"hotel": {"path": "name"}}}}}]}}, {"version": "v0.9", "updateDataModel": {"surfaceId": "hotels", "path": "/", "value": {"items": [{"name": "Harbor Inn"}]}}}]}, "replace": true}
+
+data: {"type": "ACTIVITY_SNAPSHOT", "messageId": "a2ui-surface-gen-1", "activityType": "a2ui-surface", "content": {"a2ui_operations": [{"version": "v0.9", "createSurface": {"surfaceId": "hotels", "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}, {"version": "v0.9", "updateComponents": {"surfaceId": "hotels", "components": [{"id": "root", "component": "List", "children": {"componentId": "card", "path": "/items"}}, {"id": "card", "component": "Row", "children": ["name", "book"]}, {"id": "name", "component": "Text", "text": {"path": "name"}}, {"id": "book_l", "component": "Text", "text": "Book"}, {"id": "book", "component": "Button", "child": "book_l", "action": {"event": {"name": "book", "context": {"hotel": {"path": "name"}}}}}]}}, {"version": "v0.9", "updateDataModel": {"surfaceId": "hotels", "path": "/", "value": {"items": [{"name": "Harbor Inn"}, {"name": "Cliff House"}]}}}]}, "replace": true}
+
+data: {"type": "TOOL_CALL_RESULT", "messageId": "res-1", "toolCallId": "gen-1", "content": "{\"a2ui_operations\": [{\"version\": \"v0.9\", \"createSurface\": {\"surfaceId\": \"hotels\", \"catalogId\": \"https://a2ui.org/specification/v0_9/basic_catalog.json\"}}, {\"version\": \"v0.9\", \"updateComponents\": {\"surfaceId\": \"hotels\", \"components\": [{\"id\": \"root\", \"component\": \"List\", \"children\": {\"componentId\": \"card\", \"path\": \"/items\"}}, {\"id\": \"card\", \"component\": \"Row\", \"children\": [\"name\", \"book\"]}, {\"id\": \"name\", \"component\": \"Text\", \"text\": {\"path\": \"name\"}}, {\"id\": \"book_l\", \"component\": \"Text\", \"text\": \"Book\"}, {\"id\": \"book\", \"component\": \"Button\", \"child\": \"book_l\", \"action\": {\"event\": {\"name\": \"book\", \"context\": {\"hotel\": {\"path\": \"name\"}}}}}]}}, {\"version\": \"v0.9\", \"updateDataModel\": {\"surfaceId\": \"hotels\", \"path\": \"/\", \"value\": {\"items\": [{\"name\": \"Harbor Inn\"}, {\"name\": \"Cliff House\"}]}}}]}"}
+
+data: {"type": "TOOL_CALL_CHUNK", "toolCallId": "search-1", "toolCallName": "search_flights", "parentMessageId": "m2", "delta": "{\"to\":"}
+
+data: {"type": "TOOL_CALL_CHUNK", "delta": "\"SFO\"}"}
+
+data: {"type": "TOOL_CALL_RESULT", "messageId": "res-2", "toolCallId": "search-1", "content": "{\"a2ui_operations\": [{\"version\": \"v0.9\", \"createSurface\": {\"surfaceId\": \"flights\", \"catalogId\": \"https://a2ui.org/specification/v0_9/basic_catalog.json\"}}, {\"version\": \"v0.9\", \"updateComponents\": {\"surfaceId\": \"flights\", \"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": {\"path\": \"/summary\"}}]}}, {\"version\": \"v0.9\", \"updateDataModel\": {\"surfaceId\": \"flights\", \"path\": \"/\", \"value\": {\"summary\": \"2 flights found\"}}}]}"}
+
+data: {"type": "STATE_SNAPSHOT", "snapshot": {"trip": {"city": "Lisbon", "nights": 2}}}
+
+data: {"type": "STATE_DELTA", "delta": [{"op": "replace", "path": "/trip/nights", "value": 3}, {"op": "add", "path": "/trip/tags", "value": ["sea"]}, {"op": "add", "path": "/trip/tags/0", "value": "quiet"}]}
+
+data: {"type": "CUSTOM", "name": "something", "value": null}
+
+data: {"type": "TEXT_MESSAGE_START", "messageId": "m3", "role": "assistant"}
+
+data: {"type": "TEXT_MESSAGE_CONTENT", "messageId": "m3", "delta": "Done!"}
+
+data: {"type": "TEXT_MESSAGE_END", "messageId": "m3"}
+
+data: {"type": "RUN_FINISHED", "threadId": "thr", "runId": "run-1"}
+

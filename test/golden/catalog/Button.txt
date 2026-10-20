@@ -1,0 +1,5 @@
+=== s
+[Default]  [Primary]  Borderless  [➤]  [Blocked]
+--- faces
+a2ui-button-primary: [Primary]
+a2ui-button-inactive: [Blocked]

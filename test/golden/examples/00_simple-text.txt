@@ -1,0 +1,4 @@
+=== gallery-simple-text
+Hello, Minimal Catalog!
+--- faces
+a2ui-heading-1: Hello, Minimal Catalog!

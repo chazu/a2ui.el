@@ -1,0 +1,11 @@
+=== gallery-notification-permission
+────────────────────────────────────────────────────────────
+  ✓
+  Enable notification
+  Get alerts for order status changes
+                        [Yes]  [No]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: Enable notification
+a2ui-rule: ────────────────────────────────────────────────────────────

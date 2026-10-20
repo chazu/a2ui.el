@@ -1,0 +1,23 @@
+=== gallery-sports-player
+────────────────────────────────────────────────────────────
+  ▣ Image
+  Marcus Johnson
+  #23  LA Lakers
+  ──────────────────────────────────────────────────────────
+  28.4  7.2  6.8
+  PPG   RPG  APG
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-heading-2: Marcus Johnson
+a2ui-heading-3: #23
+a2ui-caption: LA Lakers
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-heading-3: 28.4
+a2ui-heading-3: 7.2
+a2ui-heading-3: 6.8
+a2ui-caption: PPG
+a2ui-caption: RPG
+a2ui-caption: APG
+a2ui-rule: ────────────────────────────────────────────────────────────

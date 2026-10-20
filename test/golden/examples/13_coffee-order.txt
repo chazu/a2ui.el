@@ -1,0 +1,24 @@
+=== gallery-coffee-order
+────────────────────────────────────────────────────────────
+  ♥  Sunrise Coffee
+  Oat Milk Latte      $6.45
+  Grande, Extra Shot
+  Chocolate Croissant  $4.25
+  Warmed
+  ──────────────────────────────────────────────────────────
+  Subtotal                                          $10.70
+  Tax                                                $0.96
+  Total                                             $11.66
+  [Purchase]  [Add to cart]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: Sunrise Coffee
+a2ui-caption: Grande, Extra Shot
+a2ui-caption: Warmed
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-caption: Subtotal
+a2ui-caption: Tax
+a2ui-heading-4: Total
+a2ui-heading-4: $11.66
+a2ui-rule: ────────────────────────────────────────────────────────────

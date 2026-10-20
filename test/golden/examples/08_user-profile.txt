@@ -1,0 +1,22 @@
+=== gallery-user-profile
+────────────────────────────────────────────────────────────
+  ▣ Image
+  Sarah Chen
+  @sarahchen
+  Product Designer at Tech Co. Creating delightful experiences.
+  12,400     892        347
+  Followers  Following  Posts
+  [Follow]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-heading-2: Sarah Chen
+a2ui-caption: @sarahchen
+a2ui-heading-3: 12,400
+a2ui-heading-3: 892
+a2ui-heading-3: 347
+a2ui-caption: Followers
+a2ui-caption: Following
+a2ui-caption: Posts
+a2ui-rule: ────────────────────────────────────────────────────────────

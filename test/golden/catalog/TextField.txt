@@ -1,0 +1,14 @@
+=== s
+Name: Ada
+Password: *******
+Age: 36
+Notes:
+  First line
+  Second line
+  [Edit]
+Bio:
+  (empty)
+  [Edit]
+Email: nope
+--- faces
+

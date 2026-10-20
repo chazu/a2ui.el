@@ -1,0 +1,14 @@
+=== custom-grid-demo
+────────────────────────────────────────────────────────────
+  Native Container Component Showcase
+  Demonstrates a custom container component (CustomGrid) implemented in the client application framework, rendering a 4-cell layout hosting both native components and universal web components as children.
+────────────────────────────────────────────────────────────
+…
+Universal components and native components seamlessly coexist in the same A2UI surface.
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-2: Native Container Component Showcase
+a2ui-caption: Demonstrates a custom container component (CustomGrid) implemented in the client application framework, rendering a 4-cell layout hosting both native components and universal web components as children.
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-placeholder: …
+a2ui-caption: Universal components and native components seamlessly coexist in the same A2UI surface.

@@ -1,0 +1,3 @@
+{"version": "v0.9", "createSurface": {"surfaceId": "s", "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s", "components": [{"id": "root", "component": "Column", "children": ["on", "off"]}, {"id": "on", "component": "CheckBox", "label": "Subscribed", "value": {"path": "/on"}}, {"id": "off", "component": "CheckBox", "label": "Unsubscribed", "value": {"path": "/off"}}]}}
+{"version": "v0.9", "updateDataModel": {"surfaceId": "s", "value": {"on": true, "off": false}}}

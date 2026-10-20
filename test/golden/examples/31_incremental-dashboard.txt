@@ -1,0 +1,15 @@
+=== gallery-incremental-dashboard
+System Dashboard
+────────────────────────────────────────────────────────────
+  Analytics are ready.
+────────────────────────────────────────────────────────────
+System boot complete.
+All services healthy.
+Waiting for user input.
+--- faces
+a2ui-heading-2: System Dashboard
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-caption: System boot complete.
+a2ui-caption: All services healthy.
+a2ui-caption: Waiting for user input.

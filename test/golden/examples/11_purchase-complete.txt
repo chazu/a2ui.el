@@ -1,0 +1,19 @@
+=== gallery-purchase-complete
+────────────────────────────────────────────────────────────
+  ✓
+  Purchase Complete
+  ▣ Image  Wireless Headphones Pro
+           $199.99
+  ──────────────────────────────────────────────────────────
+  →  Arrives Dec 18 - Dec 20
+  Sold by:  TechStore Official
+  [View Order Details]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-2: Purchase Complete
+a2ui-link: ▣ Image
+a2ui-heading-4: Wireless Headphones Pro
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-caption: Sold by:
+a2ui-rule: ────────────────────────────────────────────────────────────

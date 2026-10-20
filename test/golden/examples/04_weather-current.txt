@@ -1,0 +1,31 @@
+=== gallery-weather-current
+────────────────────────────────────────────────────────────
+  72°  58°
+  Austin, TX
+  Clear skies with light breeze
+  Tue  Wed  Thu  Fri  Sat
+  ☀️    ☀️    ⛅   ☀️    ☀️
+  74°  76°  71°  73°  75°
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-1: 72°
+a2ui-heading-2: 58°
+a2ui-heading-3: Austin, TX
+a2ui-caption: Clear skies with light breeze
+a2ui-caption: Tue
+a2ui-caption: Wed
+a2ui-caption: Thu
+a2ui-caption: Fri
+a2ui-caption: Sat
+a2ui-heading-3: ☀️
+a2ui-heading-3: ☀️
+a2ui-heading-3: ⛅
+a2ui-heading-3: ☀️
+a2ui-heading-3: ☀️
+a2ui-caption: 74°
+a2ui-caption: 76°
+a2ui-caption: 71°
+a2ui-caption: 73°
+a2ui-caption: 75°
+a2ui-rule: ────────────────────────────────────────────────────────────

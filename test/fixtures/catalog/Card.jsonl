@@ -1,0 +1,2 @@
+{"version": "v0.9", "createSurface": {"surfaceId": "s", "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s", "components": [{"id": "root", "component": "Card", "child": "body"}, {"id": "body", "component": "Column", "children": ["title", "inner"]}, {"id": "title", "component": "Text", "text": "Outer card", "variant": "h3"}, {"id": "inner", "component": "Card", "child": "innertext"}, {"id": "innertext", "component": "Text", "text": "Inner card"}]}}

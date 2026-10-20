@@ -1,0 +1,15 @@
+=== gallery-markdown-text
+────────────────────────────────────────────────────────────
+  Markdown Rendering
+  Heading 1
+  This is bold text and italic text.
+  • List item 1
+  • List item 2
+  Link to Google
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: Markdown Rendering
+a2ui-heading-1: Heading 1
+a2ui-link: Link to Google
+a2ui-rule: ────────────────────────────────────────────────────────────

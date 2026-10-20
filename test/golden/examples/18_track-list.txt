@@ -1,0 +1,28 @@
+=== gallery-track-list
+────────────────────────────────────────────────────────────
+  ▶  Focus Flow
+  ──────────────────────────────────────────────────────────
+  1  ▣ Image  Weightless     8:09
+              Marconi Union
+  2  ▣ Image  Clair de Lune  5:12
+              Debussy
+  3  ▣ Image  Ambient Light  6:45
+              Brian Eno
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: Focus Flow
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-caption: 1
+a2ui-link: ▣ Image
+a2ui-caption: 8:09
+a2ui-caption: Marconi Union
+a2ui-caption: 2
+a2ui-link: ▣ Image
+a2ui-caption: 5:12
+a2ui-caption: Debussy
+a2ui-caption: 3
+a2ui-link: ▣ Image
+a2ui-caption: 6:45
+a2ui-caption: Brian Eno
+a2ui-rule: ────────────────────────────────────────────────────────────

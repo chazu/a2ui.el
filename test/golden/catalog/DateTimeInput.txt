@@ -1,0 +1,7 @@
+=== s
+Day: [Mon Feb 2, 2026]
+Alarm: [07:30]
+Meeting: [Mon Feb 2, 2026 15:17]
+Deadline: [Pick…]
+--- faces
+

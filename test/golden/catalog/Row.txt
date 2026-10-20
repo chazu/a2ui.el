@@ -1,0 +1,9 @@
+=== s
+★  Inline  row
+Left                                                   Right
+Block one    Block two
+second line  more
+Given: Ada
+Family: Lovelace
+--- faces
+

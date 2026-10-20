@@ -1,0 +1,17 @@
+=== gallery-product-card
+────────────────────────────────────────────────────────────
+  ▣ Image
+  Wireless Headphones Pro
+  ★★★★★  (2,847 reviews)
+  $199.99  $249.99
+  [Add to Cart]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-heading-3: Wireless Headphones Pro
+a2ui-caption: (2,847 reviews)
+a2ui-heading-2: $199.99
+a2ui-caption: $249.99
+a2ui-button-primary: [Add to Cart]
+a2ui-rule: ────────────────────────────────────────────────────────────

@@ -1,0 +1,20 @@
+=== gallery-financial-grid
+────────────────────────────────────────────────────────────
+  Asset  Price  24h Change  Market Cap
+  $  Bitcoin  $43,500.25  1.2%  $850,000,000,000.00
+     BTC
+  $  Ethereum  $2,250.50  -0.5%  $270,000,000,000.00
+     ETH
+  $  Solana  $95.80  5.4%  $40,000,000,000.00
+     SOL
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-caption: Asset
+a2ui-caption: Price
+a2ui-caption: 24h Change
+a2ui-caption: Market Cap
+a2ui-caption: BTC
+a2ui-caption: ETH
+a2ui-caption: SOL
+a2ui-rule: ────────────────────────────────────────────────────────────

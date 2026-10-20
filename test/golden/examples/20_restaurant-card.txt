@@ -1,0 +1,17 @@
+=== gallery-restaurant-card
+────────────────────────────────────────────────────────────
+  ▣ Image
+  The Italian Kitchen                                  $$$
+  Italian • Pasta • Wine Bar
+  ★  4.8  (2,847 reviews)
+  0.8 mi  25-35 min
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-heading-3: The Italian Kitchen
+a2ui-caption: Italian • Pasta • Wine Bar
+a2ui-caption: (2,847 reviews)
+a2ui-caption: 0.8 mi
+a2ui-caption: 25-35 min
+a2ui-rule: ────────────────────────────────────────────────────────────

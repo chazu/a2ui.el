@@ -1,0 +1,14 @@
+=== gallery-advanced-validator
+────────────────────────────────────────────────────────────
+  Hello! Today is Monday, December 15.
+  Email Address:
+  Phone Number:
+  Zip Code:
+  [ ] I agree to the terms and conditions
+  [Submit Registration]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: Hello! Today is Monday, December 15.
+a2ui-button-inactive: [Submit Registration]
+a2ui-rule: ────────────────────────────────────────────────────────────

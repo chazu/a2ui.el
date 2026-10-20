@@ -1,0 +1,13 @@
+=== gallery-task-card
+────────────────────────────────────────────────────────────
+  [ ]
+  Review pull request
+  Review and approve the authentication module changes.
+  Due: [Mon Dec 15, 2025 12:00]  Backend
+  ⚠
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: Review pull request
+a2ui-caption: Backend
+a2ui-rule: ────────────────────────────────────────────────────────────

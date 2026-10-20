@@ -1,0 +1,17 @@
+=== gallery-countdown-timer
+────────────────────────────────────────────────────────────
+  Product Launch
+  14    08     32
+  Days  Hours  Minutes
+  January 15, 2025
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: Product Launch
+a2ui-heading-1: 14
+a2ui-heading-1: 08
+a2ui-heading-1: 32
+a2ui-caption: Days
+a2ui-caption: Hours
+a2ui-caption: Minutes
+a2ui-rule: ────────────────────────────────────────────────────────────

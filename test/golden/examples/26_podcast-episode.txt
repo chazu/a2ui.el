@@ -1,0 +1,18 @@
+=== gallery-podcast-episode
+────────────────────────────────────────────────────────────
+  ▣ Image
+  Tech Talk Daily
+  The Future of AI in Product Design
+  45 min  Dec 15, 2024
+  How AI is transforming the way we design and build products.
+  ♪ The Future of AI in Product Design
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-caption: Tech Talk Daily
+a2ui-heading-4: The Future of AI in Product Design
+a2ui-caption: 45 min
+a2ui-caption: Dec 15, 2024
+a2ui-link: ♪ The Future of AI in Product Design
+a2ui-rule: ────────────────────────────────────────────────────────────

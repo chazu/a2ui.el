@@ -1,0 +1,6 @@
+=== modal-sample-surface
+Modal Component Sample
+[unsupported: Modal]
+--- faces
+a2ui-heading-2: Modal Component Sample
+a2ui-placeholder: [unsupported: Modal]

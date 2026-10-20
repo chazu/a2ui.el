@@ -1,0 +1,30 @@
+data: {"type":"RUN_STARTED","threadId":"8a1d6c65-7b84-4fe4-a1d0-7d35e985370e","runId":"2314342c-e084-496a-a3d9-8bce88abb8b6","protocolVersion":"1.0"}
+
+data: {"type":"TEXT_MESSAGE_START","messageId":"09f4d8fb-0046-4d8b-a0c3-ddb4f1082dc9","role":"assistant"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"09f4d8fb-0046-4d8b-a0c3-ddb4f1082dc9","delta":"I need a couple of detai"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"09f4d8fb-0046-4d8b-a0c3-ddb4f1082dc9","delta":"ls before I deploy billi"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"09f4d8fb-0046-4d8b-a0c3-ddb4f1082dc9","delta":"ng."}
+
+data: {"type":"TEXT_MESSAGE_END","messageId":"09f4d8fb-0046-4d8b-a0c3-ddb4f1082dc9"}
+
+data: {"type":"TOOL_CALL_START","toolCallId":"call_3de53502c4b0","toolCallName":"render_a2ui","parentMessageId":"09f4d8fb-0046-4d8b-a0c3-ddb4f1082dc9"}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"call_3de53502c4b0","delta":"{\"surfaceId\": \"deploy_params\", \"components\": [{\"id\": \"root\", \"component\": \"Column\", \"children\": [\"title\", \"env\", \"replicas\", \"go\"]}, {\"id\": \"title\", \"component\": \"Text\", \"variant\": \"h3\", \"text\": \"Depl"}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"call_3de53502c4b0","delta":"oy billing\"}, {\"id\": \"env\", \"component\": \"ChoicePicker\", \"label\": \"Environment\", \"options\": [{\"label\": \"Staging\", \"value\": \"staging\"}, {\"label\": \"Production\", \"value\": \"prod\"}], \"value\": {\"path\": \"/fo"}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"call_3de53502c4b0","delta":"rm/env\"}}, {\"id\": \"replicas\", \"component\": \"TextField\", \"label\": \"Replicas\", \"value\": {\"path\": \"/form/replicas\"}, \"checks\": [{\"condition\": {\"call\": \"numeric\", \"args\": {\"value\": {\"path\": \"/form/replica"}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"call_3de53502c4b0","delta":"s\"}, \"min\": 1, \"max\": 20}}, \"message\": \"Enter 1 to 20 replicas.\"}]}, {\"id\": \"go_label\", \"component\": \"Text\", \"text\": \"Deploy\"}, {\"id\": \"go\", \"component\": \"Button\", \"child\": \"go_label\", \"variant\": \"pri"}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"call_3de53502c4b0","delta":"mary\", \"action\": {\"event\": {\"name\": \"deploy\", \"context\": {\"env\": {\"path\": \"/form/env\"}, \"replicas\": {\"path\": \"/form/replicas\"}}}}, \"checks\": [{\"condition\": {\"call\": \"numeric\", \"args\": {\"value\": {\"path"}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"call_3de53502c4b0","delta":"\": \"/form/replicas\"}, \"min\": 1, \"max\": 20}}, \"message\": \"Fix the replica count first.\"}]}], \"data\": {\"form\": {\"env\": [\"staging\"], \"replicas\": \"3\"}}}"}
+
+data: {"type":"TOOL_CALL_END","toolCallId":"call_3de53502c4b0"}
+
+data: {"type":"RUN_FINISHED","threadId":"8a1d6c65-7b84-4fe4-a1d0-7d35e985370e","runId":"2314342c-e084-496a-a3d9-8bce88abb8b6","outcome":{"type":"success","pendingToolCallIds":["call_3de53502c4b0"]}}
+

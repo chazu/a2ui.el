@@ -1,0 +1,18 @@
+=== gallery-login-form
+────────────────────────────────────────────────────────────
+  Welcome back
+  Sign in to your account
+  Email:
+  Password:
+  [Sign in]
+  ──────────────────────────────────────────────────────────
+             Don't have an account?  [Sign up]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-2: Welcome back
+a2ui-caption: Sign in to your account
+a2ui-button-inactive: [Sign in]
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-caption: Don't have an account?
+a2ui-rule: ────────────────────────────────────────────────────────────

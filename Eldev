@@ -1,0 +1,14 @@
+; -*- mode: emacs-lisp; lexical-binding: t -*-
+
+(eldev-use-package-archive 'gnu-elpa)
+(eldev-use-package-archive 'melpa-unstable)
+
+(setf eldev-project-main-file "a2ui.el")
+
+;; The basic catalog schema ships with the package; the core reads it
+;; to validate components.
+(setf eldev-files-to-package `(:or ,eldev-files-to-package "catalogs/"))
+
+(eldev-add-loading-roots 'test "test")
+
+(setf eldev-lint-default '(package))

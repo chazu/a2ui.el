@@ -1,0 +1,25 @@
+=== gallery-invitation-builder
+Invitation Builder
+Customize your invitation
+Event Name: Summer Gala
+Guest of Honor: Alex Johnson
+Event Date & Time: [Tue Jul 15, 2025 15:00]
+Location: [Sunset Terrace]
+Live Preview
+────────────────────────────────────────────────────────────
+  ▣ Image
+  Summer Gala
+  Celebrating  Alex Johnson
+  Tuesday, July 15, 2025 at 7:00 PM
+  Location: terrace
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-heading-1: Invitation Builder
+a2ui-heading-3: Customize your invitation
+a2ui-caption: Live Preview
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-heading-2: Summer Gala
+a2ui-heading-3: Alex Johnson
+a2ui-caption: Location: terrace
+a2ui-rule: ────────────────────────────────────────────────────────────

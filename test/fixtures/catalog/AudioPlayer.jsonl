@@ -1,0 +1,2 @@
+{"version": "v0.9", "createSurface": {"surfaceId": "s", "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s", "components": [{"id": "root", "component": "Column", "children": ["a", "b"]}, {"id": "a", "component": "AudioPlayer", "url": "https://example.com/ep1.mp3", "description": "Episode 1"}, {"id": "b", "component": "AudioPlayer", "url": "https://example.com/ep2.mp3"}]}}

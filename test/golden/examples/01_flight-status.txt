@@ -1,0 +1,22 @@
+=== gallery-flight-status
+────────────────────────────────────────────────────────────
+  ➤  OS 87  Mon, Dec 15
+  Vienna  →  New York
+  ──────────────────────────────────────────────────────────
+  Departs   Status   Arrives
+  10:15 AM  On Time  2:30 PM
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: OS 87
+a2ui-caption: Mon, Dec 15
+a2ui-heading-2: Vienna
+a2ui-heading-2: →
+a2ui-heading-2: New York
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-caption: Departs
+a2ui-caption: Status
+a2ui-caption: Arrives
+a2ui-heading-3: 10:15 AM
+a2ui-heading-3: 2:30 PM
+a2ui-rule: ────────────────────────────────────────────────────────────

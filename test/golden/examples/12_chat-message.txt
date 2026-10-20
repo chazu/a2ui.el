@@ -1,0 +1,21 @@
+=== gallery-chat-message
+────────────────────────────────────────────────────────────
+  ℹ  project-updates
+  ──────────────────────────────────────────────────────────
+  ▣ Image
+  Mike Chen  10:32 AM
+  Just pushed the new API changes. Ready for review.
+  ▣ Image  Sarah Kim  10:45 AM
+           Great! I'll take a look after standup.
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: project-updates
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-heading-4: Mike Chen
+a2ui-caption: 10:32 AM
+a2ui-link: ▣ Image
+a2ui-heading-4: Sarah Kim
+a2ui-caption: 10:45 AM
+a2ui-rule: ────────────────────────────────────────────────────────────

@@ -1,0 +1,19 @@
+=== gallery-incremental
+The Golden Fork
+Fine Dining & Spirits
+123 Gastronomy Lane
+[Book now]
+Ocean's Bounty
+Fresh Daily Seafood
+456 Shoreline Dr
+[Book now]
+Pizzeria Roma
+Authentic Wood-Fired Pizza
+789 Napoli Way
+[Book now]
+Spice Route
+Exotic Flavors from the East
+101 Silk Road St
+[Book now]
+--- faces
+

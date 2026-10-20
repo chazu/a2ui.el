@@ -1,0 +1,14 @@
+data: {"type":"RUN_STARTED","threadId":"8a1d6c65-7b84-4fe4-a1d0-7d35e985370e","runId":"52b8396e-939a-4e1e-a1bc-22e02dab3060","protocolVersion":"1.0"}
+
+data: {"type":"TEXT_MESSAGE_START","messageId":"f440326c-3784-4215-bf21-6c03f0920a93","role":"assistant"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"f440326c-3784-4215-bf21-6c03f0920a93","delta":"Production needs a confi"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"f440326c-3784-4215-bf21-6c03f0920a93","delta":"rmation before I deploy "}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"f440326c-3784-4215-bf21-6c03f0920a93","delta":"5 replicas."}
+
+data: {"type":"TEXT_MESSAGE_END","messageId":"f440326c-3784-4215-bf21-6c03f0920a93"}
+
+data: {"type":"RUN_FINISHED","threadId":"8a1d6c65-7b84-4fe4-a1d0-7d35e985370e","runId":"52b8396e-939a-4e1e-a1bc-22e02dab3060","outcome":{"type":"interrupt","interrupts":[{"id":"confirm-52b8396e","reason":"confirmation","message":"Deploy billing to prod with 5 replicas?"}]}}
+

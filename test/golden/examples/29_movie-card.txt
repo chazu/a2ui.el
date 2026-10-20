@@ -1,0 +1,19 @@
+=== gallery-movie-card
+────────────────────────────────────────────────────────────
+  ▣ Image
+  Interstellar  (2014)
+  Sci-Fi • Adventure • Drama
+  ★  8.7/10
+  ▦  2h 49min
+  [Watch Trailer]
+  [unsupported: Modal]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-link: ▣ Image
+a2ui-heading-3: Interstellar
+a2ui-caption: (2014)
+a2ui-caption: Sci-Fi • Adventure • Drama
+a2ui-caption: 2h 49min
+a2ui-placeholder: [unsupported: Modal]
+a2ui-rule: ────────────────────────────────────────────────────────────

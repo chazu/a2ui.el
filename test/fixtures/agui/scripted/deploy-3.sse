@@ -1,0 +1,20 @@
+data: {"type":"RUN_STARTED","threadId":"8a1d6c65-7b84-4fe4-a1d0-7d35e985370e","runId":"817fa5f2-c813-4374-aa98-a43e68ef38ce","protocolVersion":"1.0"}
+
+data: {"type":"TEXT_MESSAGE_START","messageId":"b029c3f7-8149-499c-9dd5-095d59676135","role":"assistant"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"b029c3f7-8149-499c-9dd5-095d59676135","delta":"Approved. Deploying bill"}
+
+data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"b029c3f7-8149-499c-9dd5-095d59676135","delta":"ing to prod."}
+
+data: {"type":"TEXT_MESSAGE_END","messageId":"b029c3f7-8149-499c-9dd5-095d59676135"}
+
+data: {"type":"TOOL_CALL_START","toolCallId":"call_85999a37ec82","toolCallName":"render_a2ui","parentMessageId":"d0c7606b-c6c1-419b-93e2-e498e47fad80"}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"call_85999a37ec82","delta":"{\"surfaceId\": \"deploy_params\", \"components\": [{\"id\": \"root\", \"component\": \"Column\", \"children\": [\"title\", \"status\"]}, {\"id\": \"title\", \"component\": \"Text\", \"variant\": \"h3\", \"text\": \"Deploy billing\"}, {"}
+
+data: {"type":"TOOL_CALL_ARGS","toolCallId":"call_85999a37ec82","delta":"\"id\": \"status\", \"component\": \"Text\", \"text\": \"\\u2713 Deployed billing to prod.\"}]}"}
+
+data: {"type":"TOOL_CALL_END","toolCallId":"call_85999a37ec82"}
+
+data: {"type":"RUN_FINISHED","threadId":"8a1d6c65-7b84-4fe4-a1d0-7d35e985370e","runId":"817fa5f2-c813-4374-aa98-a43e68ef38ce","outcome":{"type":"success","pendingToolCallIds":["call_85999a37ec82"]}}
+

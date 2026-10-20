@@ -1,0 +1,3 @@
+{"version": "v0.9", "createSurface": {"surfaceId": "s", "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"}}
+{"version": "v0.9", "updateComponents": {"surfaceId": "s", "components": [{"id": "root", "component": "Row", "children": ["a", "b", "c", "d"]}, {"id": "a", "component": "Icon", "name": "mail"}, {"id": "b", "component": "Icon", "name": "check"}, {"id": "c", "component": "Icon", "name": {"path": "/icon"}}, {"id": "d", "component": "Icon", "name": "notInTheCatalog"}]}}
+{"version": "v0.9", "updateDataModel": {"surfaceId": "s", "value": {"icon": "star"}}}

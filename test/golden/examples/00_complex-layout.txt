@@ -1,0 +1,8 @@
+=== gallery-complex-layout
+User Profile Form
+First Name:
+Last Name:
+Please fill out all fields.
+--- faces
+a2ui-heading-1: User Profile Form
+a2ui-caption: Please fill out all fields.

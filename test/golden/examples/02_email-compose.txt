@@ -1,0 +1,19 @@
+=== gallery-email-compose
+────────────────────────────────────────────────────────────
+  FROM  alex@acme.com
+  TO  jordan@acme.com
+  SUBJECT  Q4 Revenue Forecast
+  ──────────────────────────────────────────────────────────
+  Hi Jordan,
+  Following up on our call. Please review the attached Q4 forecast and let me know if you have questions before the board meeting.
+  Best,
+  Alex
+  [Send email]  [Discard]
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-caption: FROM
+a2ui-caption: TO
+a2ui-caption: SUBJECT
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-rule: ────────────────────────────────────────────────────────────

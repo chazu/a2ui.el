@@ -1,0 +1,6 @@
+=== gallery-formatted-text
+Type something:
+Formatted output:
+You typed:
+--- faces
+a2ui-caption: Formatted output:

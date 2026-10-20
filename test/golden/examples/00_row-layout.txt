@@ -1,0 +1,4 @@
+=== gallery-row-layout
+Left Content                                   Right Content
+--- faces
+a2ui-caption: Right Content

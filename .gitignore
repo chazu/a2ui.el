@@ -1,0 +1,5 @@
+/.eldev/
+/dist/
+*.elc
+*-autoloads.el
+*-pkg.el

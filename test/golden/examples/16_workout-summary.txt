@@ -1,0 +1,20 @@
+=== gallery-workout-summary
+────────────────────────────────────────────────────────────
+  ♥  Workout Complete
+  ──────────────────────────────────────────────────────────
+  32:15     385       5.2 km
+  Duration  Calories  Distance
+  Monday, Dec 15 at 7:30 AM
+────────────────────────────────────────────────────────────
+--- faces
+a2ui-rule: ────────────────────────────────────────────────────────────
+a2ui-heading-3: Workout Complete
+a2ui-rule: ──────────────────────────────────────────────────────────
+a2ui-heading-3: 32:15
+a2ui-heading-3: 385
+a2ui-heading-3: 5.2 km
+a2ui-caption: Duration
+a2ui-caption: Calories
+a2ui-caption: Distance
+a2ui-caption: Monday, Dec 15 at 7:30 AM
+a2ui-rule: ────────────────────────────────────────────────────────────

@@ -1,0 +1,5 @@
+=== gallery-interactive-button
+Click the button below
+[Click Me]
+--- faces
+a2ui-button-primary: [Click Me]

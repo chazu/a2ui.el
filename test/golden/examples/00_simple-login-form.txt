@@ -1,0 +1,8 @@
+=== gallery-simple-login-form
+Login
+Username:
+Password:
+[Sign In]
+--- faces
+a2ui-heading-2: Login
+a2ui-button-primary: [Sign In]
