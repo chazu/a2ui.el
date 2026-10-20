@@ -46,7 +46,9 @@
 (require 'a2ui-core)
 (require 'a2ui-vui)
 (require 'a2ui-emacs)
+(require 'a2ui-tools)
 (require 'a2ui-agui)
+(require 'a2ui-mcp)
 
 (defcustom a2ui-log-buffer-name "*a2ui-log*"
   "Name of the buffer recording protocol messages."
@@ -132,6 +134,7 @@ METADATA is shown after outbound messages that carry it."
 
 (add-hook 'a2ui-agui-event-functions #'a2ui--log-agui)
 (add-hook 'a2ui-agui-session-functions #'a2ui-vui-attach)
+(add-hook 'a2ui-tools-host-functions #'a2ui-vui-attach)
 
 ;;;###autoload
 (defun a2ui-agui-show-log ()

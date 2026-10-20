@@ -53,6 +53,7 @@
 (require 'auth-source)
 (require 'url-parse)
 (require 'a2ui-core)
+(require 'a2ui-tools)
 
 (defgroup a2ui-agui nil
   "AG-UI transport for A2UI surfaces."
@@ -342,12 +343,7 @@ RESUME and FORWARDED-PROPS go into the RunAgentInput."
 
 ;;;; Outbound actions
 
-(defun a2ui-agui--action-text (action)
-  "Describe ACTION for the agent the way the AG-UI A2UI middleware does."
-  (format "User performed action %S on surface %S (component: %s). Context: %s"
-          (gethash "name" action) (gethash "surfaceId" action)
-          (gethash "sourceComponentId" action)
-          (a2ui-json-encode (or (gethash "context" action) (a2ui-obj)))))
+(defalias 'a2ui-agui--action-text #'a2ui-tools-action-text)
 
 (defun a2ui-agui--outbound (agent message metadata)
   "Handle MESSAGE, an outbound A2UI envelope, for AGENT.
@@ -418,30 +414,9 @@ of the surfaces touched."
     (delete-dups touched)))
 
 (defun a2ui-agui--render-operations (agent args)
-  "Return the A2UI operations that `render_a2ui' ARGS stand for in AGENT.
-Besides surfaceId/components/data, args holding a2ui_operations or
-messages arrays are accepted."
-  (let ((session (a2ui-agui-agent-session agent))
-        (id (gethash "surfaceId" args)))
-    (cond
-     ((vectorp (gethash "a2ui_operations" args)) (gethash "a2ui_operations" args))
-     ((vectorp (gethash "messages" args)) (gethash "messages" args))
-     ((not (stringp id))
-      (signal 'a2ui-error (list "render_a2ui needs a surfaceId string")))
-     (t
-      (delq nil
-            (list (unless (a2ui-session-surface session id)
-                    (a2ui-obj "version" "v0.9"
-                              "createSurface" (a2ui-obj "surfaceId" id
-                                                        "catalogId" (or (gethash "catalogId" args)
-                                                                        (a2ui-agui--default-catalog-id agent)))))
-                  (a2ui-obj "version" "v0.9"
-                            "updateComponents" (a2ui-obj "surfaceId" id
-                                                         "components" (or (gethash "components" args) [])))
-                  (when (gethash "data" args)
-                    (a2ui-obj "version" "v0.9"
-                              "updateDataModel" (a2ui-obj "surfaceId" id "path" "/"
-                                                          "value" (gethash "data" args))))))))))
+  "Return the A2UI operations that `render_a2ui' ARGS stand for in AGENT."
+  (a2ui-tools-render-operations (a2ui-agui-agent-session agent) args
+                                (a2ui-agui--default-catalog-id agent)))
 
 (defun a2ui-agui--render (agent id)
   "Apply the finished `render_a2ui' call ID of AGENT."

@@ -13,4 +13,7 @@
 
 (eldev-add-loading-roots 'test "test")
 
+;; The gptel adapter is tested against the real gptel.
+(eldev-add-extra-dependencies 'test 'gptel)
+
 (setf eldev-lint-default '(package))

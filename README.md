@@ -35,8 +35,9 @@ Reviewer: [Select...]
 - **The A2UI v0.9 basic catalog**: Text with Markdown, Column, Row, List, Card, Divider, Icon, Button, TextField (including multi-line, edited in its own buffer), CheckBox, ChoicePicker, Slider and DateTimeInput (using `org-read-date`). Image, Video and AudioPlayer appear as links. Tabs and Modal are not supported yet.
 - **An Emacs catalog**: the basic components plus Section (folds), Table (row selection and row actions), Diff (fontified by `diff-mode`, with Accept/Reject), Code (fontified by the language's major mode), Picker (`completing-read`), FileRef and OrgText.
 - **Live binding**: inputs write to the data model as you type, and checks run as you go. A field's errors show once you've touched it, or after a blocked submit.
-- **An [AG-UI](https://docs.ag-ui.com) client**: works with any AG-UI agent, including ones behind the AG-UI A2UI middleware. Interrupts become Approve/Reject surfaces, and invalid renders go back to the agent to fix.
-- **Token-efficient prompting**: agents get a compact catalog digest of about 900 tokens instead of a 5,000-token JSON Schema.
+- **Works with the agents you already use**: gptel (native tools), agent-shell (Claude Code, Codex and other ACP agents), Claude Code or Codex in a terminal (through an MCP server inside Emacs), and any [AG-UI](https://docs.ag-ui.com) agent. See [Connecting an agent](#connecting-an-agent).
+- **Feedback for the model**: invalid surfaces come back to it as compact errors so it can fix them. AG-UI interrupts become Approve/Reject surfaces.
+- **Token-efficient prompting**: models get a compact catalog digest of about 950 tokens, only when they ask for it, instead of a 5,000-token JSON Schema. `update_a2ui` changes part of a surface without resending it.
 - **No agent required**: `a2ui-replay-file` renders a file of A2UI messages.
 
 ## Requirements
@@ -44,6 +45,7 @@ Reviewer: [Select...]
 - Emacs 29.1 or later
 - [vui.el](https://github.com/d12frosted/vui.el) from MELPA. The older `1.4.0` on MELPA-stable is not enough.
 - `curl` 7.76 or later, for talking to AG-UI agents
+- For a given agent: [gptel](https://github.com/karthink/gptel), [agent-shell](https://github.com/xenodium/agent-shell), Claude Code or Codex, as below
 
 ## Installation
 
@@ -83,7 +85,92 @@ M-x a2ui-show-log
 
 Press `[Merge]` without picking a reviewer and the button refuses. Pick one, press it again, and the action appears in `*a2ui-log*`.
 
-Talk to an AG-UI agent:
+## Connecting an agent
+
+Every host gets the same four tools:
+
+| Tool | What it does |
+|---|---|
+| `render_a2ui` | Show or replace a surface (`surfaceId`, flat `components`, `data`) |
+| `update_a2ui` | Change some components or data paths of a surface |
+| `a2ui_catalog` | The compact component list, or the full schema of named components |
+| `a2ui_await_action` | Wait for the user's next button press |
+
+Surfaces open in their own buffers (see `display-buffer-alist` under [Configuration](#configuration)). A button press reaches the model in one of two ways:
+- as the result of a pending `a2ui_await_action`, when the model is waiting;
+- otherwise as your next message, in hosts that take messages (gptel, agent-shell).
+
+You don't need to name components in your request. "Show me something to review this change with" is enough: the model reads the catalog and picks.
+
+### gptel
+
+```elisp
+(use-package a2ui
+  :after gptel
+  :config
+  (require 'a2ui-gptel)
+  (a2ui-gptel-enable))     ; adds the A2UI tools to gptel-tools
+```
+
+Ask for UI in any gptel chat buffer, e.g. *"Show me a form to collect the deploy target and replica count."* When you press a button, the press is typed into the chat as `User performed action "…" … Context: {…}` and sent, so the model answers in the conversation. Set `a2ui-gptel-send-actions` to nil to have the model wait in `a2ui_await_action` instead. Each chat buffer has its own surfaces.
+
+You can turn the tools on or off per buffer from gptel's tool menu (category `a2ui`). Small local models often skip `a2ui_catalog` and guess component shapes. Setting `a2ui-tools-catalog-in-description` to t puts the digest in the tool description, at about 950 tokens per request. Use a model that calls tools reliably: with a 7B Ollama model, gptel ran the tools but the model often wrote its calls as text.
+
+### agent-shell (Claude Code, Codex, …)
+
+```elisp
+(use-package a2ui
+  :after agent-shell
+  :config
+  (require 'a2ui-agent-shell)
+  (a2ui-agent-shell-setup))  ; before starting shells
+```
+
+`a2ui-agent-shell-setup` adds an a2ui MCP server to `agent-shell-mcp-servers`. Every shell started afterwards gets its own endpoint, so its surfaces and button presses stay with it. Ask for UI as usual. When you press a button, the press is submitted to that shell as your next prompt, or queued if the agent is busy.
+
+The setup also installs a permission responder that approves a2ui's own tools, which only draw UI and report your clicks. Every other permission request is still asked as usual. Set `a2ui-agent-shell-auto-approve` to nil to be asked each time. This was verified with Claude Code through `claude-agent-acp`. Other ACP agents that accept HTTP MCP servers get the same tools.
+
+### Claude Code in a terminal
+
+Start the endpoint in Emacs, then register it with Claude Code once:
+
+```
+M-x a2ui-mcp-start          ; shows and copies the URL
+claude mcp add --transport http a2ui http://127.0.0.1:PORT/mcp/TOKEN
+```
+
+To skip permission prompts for the a2ui tools, add `"mcp__a2ui"` to `permissions.allow` in `~/.claude/settings.json`.
+
+A terminal agent can't receive messages from Emacs, so it learns of button presses through `a2ui_await_action`. Ask it to wait for you (*"…then wait for my decision"*), or press the button and then tell it to continue. Verified with Claude Code 2.1 (`claude -p`, Sonnet): it drew the surface, waited, and reported the choice.
+
+The port and token change with every Emacs session unless you pin them:
+
+```elisp
+(setq a2ui-mcp-port 7841
+      a2ui-mcp-token "3f9c0a7e5d1b42c8a6e0")  ; any private hex string
+```
+
+### Codex in a terminal
+
+Use the same endpoint:
+
+```
+M-x a2ui-mcp-start
+codex mcp add a2ui --url http://127.0.0.1:PORT/mcp/TOKEN
+```
+
+Then, in `~/.codex/config.toml`, let Codex use the tools without asking and give `a2ui_await_action` time to wait:
+
+```toml
+[mcp_servers.a2ui]
+url = "http://127.0.0.1:PORT/mcp/TOKEN"
+default_tools_approval_mode = "approve"
+tool_timeout_sec = 300
+```
+
+Without `default_tools_approval_mode`, `codex exec` refuses MCP tool calls, since it never prompts. Verified with Codex 0.163 (`codex exec`): it called `a2ui_catalog`, rendered the review, waited and reported the choice.
+
+### AG-UI agents
 
 ```elisp
 (setq a2ui-agui-agents
@@ -96,10 +183,18 @@ Talk to an AG-UI agent:
 M-x a2ui-agui-send RET deploy the billing service RET
 ```
 
-`examples/agents/` has three test agents, each run with `uv run`:
+The client declares `render_a2ui` to the agent, sends the catalog digest as context, and handles the AG-UI A2UI middleware's activity events. Behind that middleware, set `a2ui-agui-action-encoding` to `forwarded-props`.
+
+`examples/agents/` has test agents, each run with `uv run`:
 - `deploy_agent.py` is scripted and needs no API key.
 - `llm_agent.py` is backed by OpenAI.
 - `claude_agent.py` uses your Claude Code login through `claude -p`.
+
+The `drive-*.el` files next to them play the user in batch Emacs against each host:
+- `drive-gptel.el` for gptel
+- `drive-agent-shell.el` for agent-shell
+- `drive-mcp.el` for Claude Code or Codex in a terminal
+- `drive-deploy.el` and `drive-catalog.el` for AG-UI agents
 
 ## Configuration
 
@@ -123,6 +218,9 @@ M-x a2ui-agui-send RET deploy the billing service RET
 
 | Command | What it does |
 |---|---|
+| `a2ui-gptel-enable` | Add the A2UI tools to `gptel-tools` |
+| `a2ui-agent-shell-setup` | Give agent-shell agents the A2UI tools |
+| `a2ui-mcp-start` / `a2ui-mcp-stop` | Run the MCP endpoint for Claude Code or Codex in a terminal |
 | `a2ui-agui-connect` | Start a thread with an agent from `a2ui-agui-agents`, or with a URL |
 | `a2ui-agui-send` | Send a message to the current agent; surfaces appear as it answers |
 | `a2ui-agui-abort` | Stop the running request |
@@ -147,6 +245,11 @@ In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels.
 
 | Option | Default | Purpose |
 |---|---|---|
+| `a2ui-tools-catalog-in-description` | `nil` | Put the catalog digest in `render_a2ui`'s description instead of on demand |
+| `a2ui-tools-await-timeout` | `120` | Seconds `a2ui_await_action` waits by default |
+| `a2ui-gptel-send-actions` | `t` | Send button presses to the gptel chat as messages |
+| `a2ui-agent-shell-auto-approve` | `t` | Approve a2ui's own tools in agent-shell |
+| `a2ui-mcp-port`, `a2ui-mcp-token` | `0`, `nil` | Pin the `a2ui-mcp-start` endpoint across sessions |
 | `a2ui-agui-agents` | `nil` | Agents as `(NAME :url URL :headers ALIST [:action-encoding ...])` |
 | `a2ui-agui-action-encoding` | `messages` | `messages` writes actions into the history; `forwarded-props` suits agents behind the AG-UI A2UI middleware |
 | `a2ui-agui-catalog-detail` | `digest` | Catalog info per run: `digest`, `schema` or `nil` (ids only) |
@@ -164,7 +267,7 @@ In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels.
 
 ## For package authors
 
-The protocol core and the renderer don't depend on AG-UI, so any transport can feed them:
+To offer the A2UI tools in another host, make an `a2ui-tools-host` and pass tool calls to `a2ui-tools-call`; `a2ui-gptel.el` is a short example. The protocol core and the renderer don't depend on any host, so any transport can feed them:
 
 ```elisp
 (let ((session (a2ui-session-create
@@ -190,6 +293,10 @@ The files:
 | `a2ui-core.el` | A2UI as pure data: sessions, surfaces, JSON Pointer, functions, validation |
 | `a2ui-vui.el` | The vui.el renderer and the basic catalog's components |
 | `a2ui-emacs.el` | The Emacs catalog |
+| `a2ui-tools.el` | The A2UI tools, defined once for every host |
+| `a2ui-gptel.el` | gptel adapter |
+| `a2ui-mcp.el` | MCP server (HTTP) inside Emacs |
+| `a2ui-agent-shell.el` | agent-shell adapter |
 | `a2ui-agui.el` | The AG-UI client |
 | `a2ui.el` | User commands and logs |
 
