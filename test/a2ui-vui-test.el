@@ -17,6 +17,49 @@
 (require 'org)
 (require 'a2ui)
 
+(ert-deftest a2ui-vui-display-prefers-main-area ()
+  (save-window-excursion
+    (delete-other-windows)
+    (let* ((main (selected-window))
+           (shell (generate-new-buffer " *a2ui display shell*"))
+           (surface (generate-new-buffer " *a2ui display surface*"))
+           (display-buffer-alist nil)
+           (display-buffer-overriding-action nil)
+           (display-buffer-base-action nil))
+      (unwind-protect
+          (let ((side (display-buffer-in-side-window shell '((side . right) (window-width . 0.3)))))
+            (select-window side)
+            (should (eq (display-buffer surface a2ui-vui-display-action) main))
+            (should (eq (window-buffer side) shell))
+            (should (eq (selected-window) side))
+            (should (= (length (window-list)) 2))
+            ;; A split main area keeps a surface in its existing window.
+            (let ((other (split-window main nil 'below)))
+              (set-window-buffer main shell)
+              (set-window-buffer other surface)
+              (should (eq (display-buffer surface a2ui-vui-display-action) other))))
+        (kill-buffer shell)
+        (kill-buffer surface)))))
+
+(ert-deftest a2ui-vui-display-single-window-and-override ()
+  (save-window-excursion
+    (delete-other-windows)
+    (let* ((main (selected-window))
+           (surface (generate-new-buffer " *a2ui display test*"))
+           (display-buffer-alist nil)
+           (display-buffer-overriding-action nil)
+           (display-buffer-base-action nil))
+      (unwind-protect
+          (progn
+            (should (eq (display-buffer surface a2ui-vui-display-action) main))
+            (should (= (length (window-list)) 1))
+            ;; User display rules still take precedence over the default.
+            (let* ((display-buffer-alist
+                    '(("a2ui display test" (display-buffer-in-side-window) (side . right))))
+                   (side (display-buffer surface a2ui-vui-display-action)))
+              (should (eq (window-parameter side 'window-side) 'right))))
+        (kill-buffer surface)))))
+
 ;; DateTimeInput shows instants in local time; snapshots are taken in UTC
 ;; wherever the tests run.
 (set-time-zone-rule t)

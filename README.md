@@ -21,6 +21,7 @@ Let AI agents draw native, interactive UI in Emacs: forms, tables, diffs and pic
 - **Works with the agents you already use**: gptel (native tools), agent-shell (Claude Code, Codex and other ACP agents), Claude Code or Codex in a terminal (through an MCP server inside Emacs), and any [AG-UI](https://docs.ag-ui.com) agent. See [Connecting an agent](#connecting-an-agent).
 - **Feedback for the model**: invalid surfaces come back to it as compact errors so it can fix them. AG-UI interrupts become Approve/Reject surfaces.
 - **Token-efficient prompting**: models get a compact catalog digest of about 950 tokens, only when they ask for it, instead of a 5,000-token JSON Schema. `update_a2ui` changes part of a surface without resending it.
+- **Saved UIs**: agents can save named surfaces in a repository folder, list them, and recall them in a later conversation with their field values intact.
 - **No agent required**: `a2ui-replay-file` renders a file of A2UI messages.
 
 ## Requirements
@@ -70,7 +71,7 @@ Press `[Merge]` without picking a reviewer and the button refuses. Pick one, pre
 
 ## Connecting an agent
 
-Every host gets the same four tools:
+gptel, MCP clients, and agent-shell get the same seven tools:
 
 | Tool | What it does |
 |---|---|
@@ -78,12 +79,54 @@ Every host gets the same four tools:
 | `update_a2ui` | Change some components or data paths of a surface |
 | `a2ui_catalog` | The compact component list, or the full schema of named components |
 | `a2ui_await_action` | Wait for the user's next button press |
+| `save_a2ui` | Save a live surface and its current data under a name |
+| `list_a2ui` | List saved UI names and descriptions |
+| `recall_a2ui` | Restore a saved UI into this conversation |
 
 Surfaces open in their own buffers, or inside the gptel chat or agent-shell buffer (see [Where surfaces appear](#where-surfaces-appear)). A button press reaches the model in one of two ways:
 - as the result of a pending `a2ui_await_action`, when the model is waiting;
 - otherwise as your next message, in hosts that take messages (gptel, agent-shell).
 
 You don't need to name components in your request. "Show me something to review this change with" is enough: the model reads the catalog and picks.
+
+### Saving and recalling UIs
+
+Ask the agent: *"Create a deploy form and save it as `deploy` so I can use it again."*
+In a later conversation, ask: *"Bring back my deploy form"* or *"What UIs have I saved?"*
+The agent uses `render_a2ui`, then `save_a2ui`; later it can discover names with
+`list_a2ui` and open one with `recall_a2ui`.
+
+By default, files live in `.a2ui/NAME.json` at the agent session's project root
+(its working directory when there is no project). The folder is created on the
+first save. Names contain letters, digits, hyphens or underscores and start with
+a letter or digit. For example:
+
+```json
+{"surfaceId":"deploy-form","name":"deploy","description":"Deploy target and replica count"}
+```
+
+Pass that object to `save_a2ui`. To recall it, pass `{"name":"deploy"}` to
+`recall_a2ui`; optionally add `"surfaceId":"another-form"` to open a separate
+copy. Saving an existing name requires `"overwrite":true`.
+
+The JSON stores the components, catalog, theme, and **current field values**.
+Review those values before committing saved UIs to Git. It does not store
+conversation history or host credentials. Recall restores those saved values;
+later edits remain in memory until saved again. Buttons send actions to the
+conversation that recalled the UI, using its usual delivery or await mechanism.
+Relative file references resolve from that conversation's working directory.
+Invalid or unsupported files are reported without replacing the live surface.
+
+Customize `a2ui-library-directory` to change the folder. An absolute path selects
+a shared library, including a folder in the a2ui.el checkout:
+
+```elisp
+(setq a2ui-library-directory "/path/to/a2ui.el/saved-uis")
+```
+
+The files contain declarative JSON; recall never evaluates Lisp. These tools
+are available through gptel, MCP, and agent-shell. AG-UI currently exposes only
+its existing render tool.
 
 ### gptel
 
@@ -121,7 +164,7 @@ To draw surfaces in the chat itself, set `a2ui-gptel-inline-surfaces` to t. Each
 
 Set `a2ui-agent-shell-inline-surfaces` to t to draw surfaces in the shell buffer, above the prompt, when the agent's turn ends.
 
-The setup also installs a permission responder that approves a2ui's own tools, which only draw UI and report your clicks. Every other permission request is still asked as usual. Set `a2ui-agent-shell-auto-approve` to nil to be asked each time. This was verified with Claude Code through `claude-agent-acp`. Other ACP agents that accept HTTP MCP servers get the same tools.
+The setup also installs a permission responder that approves a2ui's own tools, which draw UI, report your clicks, and save or recall JSON files in the configured UI library. Every other permission request is still asked as usual. Set `a2ui-agent-shell-auto-approve` to nil to be asked each time. This was verified with Claude Code through `claude-agent-acp`. Other ACP agents that accept HTTP MCP servers get the same tools.
 
 ### Claude Code in a terminal
 
@@ -191,9 +234,9 @@ The `drive-*.el` files next to them play the user in batch Emacs against each ho
 
 ## Where surfaces appear
 
-**In a window of their own (the default).** Each new surface gets a buffer named `*a2ui: SURFACE-ID*`, shown with `display-buffer`, so `display-buffer-alist` decides where it goes: a side window, another frame, the selected window. This is the same for every host: gptel, agent-shell, Claude Code or Codex in a terminal, and AG-UI agents. `a2ui-list-surfaces` brings back one you closed. With `a2ui-vui-auto-show` set to nil, new surfaces aren't shown anywhere until you open them from that list.
+**In the main editing area (the default).** Each new surface gets a standalone buffer named `*a2ui: SURFACE-ID*`. It uses the largest ordinary window in the selected frame, leaving side windows such as agent-shell alone. If an ordinary window already shows that surface, it is reused. Display does not move keyboard focus. `a2ui-vui-display-action` controls this behavior; explicit `display-buffer-alist` rules take precedence. This is the same for every host: gptel, agent-shell, Claude Code or Codex in a terminal, and AG-UI agents. `a2ui-list-surfaces` brings back one you closed. With `a2ui-vui-auto-show` set to nil, new surfaces aren't shown anywhere until you open them from that list.
 
-**Inside the conversation.** Two options draw surfaces in the chat itself instead:
+**Inside the conversation (optional).** Both inline options default to `nil`. Enable one explicitly to draw surfaces inside the conversation:
 
 | Option | Where the surface appears |
 |---|---|
@@ -221,12 +264,10 @@ An inline surface is as live as one in its own buffer: fields, buttons and data 
   (a2ui-vui-width 72)
   (a2ui-confirm-open-url t)
   (a2ui-agui-catalog-detail 'digest)
+  (a2ui-agent-shell-inline-surfaces nil)
+  (a2ui-gptel-inline-surfaces nil)
   :config
-  (setq a2ui-agui-agents '(("local" :url "http://127.0.0.1:8770/")))
-  ;; Show surfaces in a side window.
-  (add-to-list 'display-buffer-alist
-               '("\\`\\*a2ui: " (display-buffer-in-side-window)
-                 (side . right) (window-width . 0.4))))
+  (setq a2ui-agui-agents '(("local" :url "http://127.0.0.1:8770/"))))
 ```
 
 ## Usage
@@ -263,6 +304,7 @@ In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels. A Modal's pop
 | Option | Default | Purpose |
 |---|---|---|
 | `a2ui-tools-catalog-in-description` | `nil` | Put the catalog digest in `render_a2ui`'s description instead of on demand |
+| `a2ui-library-directory` | `".a2ui"` | Saved UI folder, relative to the session's project root; an absolute path selects a shared library |
 | `a2ui-tools-await-timeout` | `120` | Seconds `a2ui_await_action` waits by default |
 | `a2ui-gptel-send-actions` | `t` | Send button presses to the gptel chat as messages |
 | `a2ui-gptel-inline-surfaces` | `nil` | Draw surfaces in the gptel chat buffer |
@@ -277,6 +319,7 @@ In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels. A Modal's pop
 | `a2ui-agui-curl-program` | `"curl"` | The curl executable |
 | `a2ui-vui-width` | `60` | Width of rules and wrapped rows |
 | `a2ui-vui-field-width` | `30` | Width of text fields |
+| `a2ui-vui-display-action` | main editing area | Where standalone surfaces appear; `display-buffer-alist` rules take precedence |
 | `a2ui-vui-auto-show` | `t` | Display new surfaces at once |
 | `a2ui-vui-inline-images` | `ask` | Images: `ask` before fetching, `t` fetch at once, `nil` links only |
 | `a2ui-vui-image-hosts` | `nil` | Hosts whose images are fetched without asking |

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 (2026-11-07)
+
+- Standalone surfaces prefer the main editing area, reusing an ordinary window without replacing side windows or moving focus. Customize `a2ui-vui-display-action` to change placement. Inline conversation rendering remains opt-in.
+
+- Add `save_a2ui`, `list_a2ui`, and `recall_a2ui` to gptel, MCP, and agent-shell. Named JSON snapshots preserve components and current data across conversations in `.a2ui/` at the project root, configurable with `a2ui-library-directory`. Saves require explicit overwrite; recalls validate before replacing live surfaces and route actions to the recalling conversation.
+
 ## 0.1.2 (2026-10-20)
 
 - Typing in a text field no longer renders the whole surface again on each key, unless something else on the surface shows the value. In a 1000-row form a keystroke went from ~150–300 ms to ~1 ms.

@@ -46,16 +46,17 @@
 
 (defcustom a2ui-agent-shell-auto-approve t
   "When non-nil, agents may use a2ui's tools without asking each time.
-The tools only draw UI in Emacs and report your clicks, so approving
-them is safe; every other permission request is left to you.  Takes
-effect through `a2ui-agent-shell-setup'."
+The tools draw UI, report clicks, and save or recall JSON files in the
+configured UI library.  Other permission requests are left to you.
+Takes effect through `a2ui-agent-shell-setup'."
   :type 'boolean
   :group 'a2ui)
 
 (defcustom a2ui-agent-shell-inline-surfaces nil
   "When non-nil, draw surfaces in the agent-shell buffer itself.
 Each new surface appears above the prompt when the agent's turn ends.
-When nil, each surface gets a buffer of its own."
+When nil (the default), each surface gets a buffer of its own in the
+main editing area, following `a2ui-vui-display-action'."
   :type 'boolean
   :group 'a2ui)
 

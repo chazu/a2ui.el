@@ -220,7 +220,7 @@ false), which would forbid any key, so these are passed as JSON text."
     (setq-default gptel-tools
                   (append (seq-remove (lambda (tool)
                                         (member (gptel-tool-name tool)
-                                                '("render_a2ui" "update_a2ui" "a2ui_catalog" "a2ui_await_action")))
+                                                (mapcar #'gptel-tool-name tools)))
                                       (default-value 'gptel-tools))
                           tools))
     (message "a2ui: %d tools added to gptel-tools" (length tools))))

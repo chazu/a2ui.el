@@ -34,6 +34,7 @@
 ;; - a2ui_catalog: the component list (a compact digest) or the
 ;;   schema of named components
 ;; - a2ui_await_action: wait for the user's next button press
+;; - save_a2ui, list_a2ui, recall_a2ui: keep named UIs across conversations
 ;;
 ;; A host is one conversation's A2UI session plus how actions reach
 ;; the model.  A host with a DELIVER function hands each action to it
@@ -49,6 +50,7 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'a2ui-core)
+(require 'a2ui-library)
 
 (defcustom a2ui-tools-catalog-in-description nil
   "When non-nil, put the catalog digest in render_a2ui's description.
@@ -206,7 +208,24 @@ NAMES, a list of tool names, limits the result."
                 :parameters (a2ui-tools--schema
                              (list :surfaceId (a2ui-obj "type" "string")
                                    :timeoutSeconds (a2ui-obj "type" "number"))
-                             nil)))))
+                             nil))
+          (list :name "save_a2ui"
+                :description "Save a rendered surface and its current field values as a named JSON UI in the repository library for later recall. Names use letters, digits, - and _. Set overwrite only to replace an existing saved UI."
+                :parameters (a2ui-tools--schema
+                             (list :surfaceId (a2ui-obj "type" "string")
+                                   :name (a2ui-obj "type" "string")
+                                   :description (a2ui-obj "type" "string")
+                                   :overwrite (a2ui-obj "type" "boolean"))
+                             '("surfaceId" "name")))
+          (list :name "list_a2ui"
+                :description "List saved UI names and descriptions in the repository library. Use this when the user asks to recall a UI."
+                :parameters (a2ui-tools--schema nil nil))
+          (list :name "recall_a2ui"
+                :description "Show a saved UI by name, restoring its saved field values. Buttons now send actions to this conversation. Optionally choose a surfaceId; otherwise replaces the stored surface id."
+                :parameters (a2ui-tools--schema
+                             (list :name (a2ui-obj "type" "string")
+                                   :surfaceId (a2ui-obj "type" "string"))
+                             '("name"))))))
     (if names
         (seq-filter (lambda (s) (member (plist-get s :name) names)) specs)
       specs)))
@@ -386,6 +405,20 @@ CALLBACK before returning."
         ("update_a2ui" (funcall callback (a2ui-tools--update host args)))
         ("a2ui_catalog" (funcall callback (a2ui-tools--catalog host args)))
         ("a2ui_await_action" (a2ui-tools--await host args callback))
+        ("save_a2ui"
+         (when (alist-get (gethash "surfaceId" args) (a2ui-tools-host-failed host) nil nil #'equal)
+           (signal 'a2ui-error '("Fix the failed render before saving this UI")))
+         (let ((file (a2ui-library-save
+                      (a2ui-tools-host-session host) (gethash "surfaceId" args)
+                      (gethash "name" args) (gethash "description" args)
+                      (eq (gethash "overwrite" args) t))))
+           (funcall callback (a2ui-tools--result "saved" "name" (gethash "name" args) "file" file))))
+        ("list_a2ui"
+         (funcall callback (a2ui-tools--result "ok" "uis" (a2ui-library-list (a2ui-tools-host-session host)))))
+        ("recall_a2ui"
+         (let ((id (a2ui-library-recall (a2ui-tools-host-session host)
+                                       (gethash "name" args) (gethash "surfaceId" args))))
+           (funcall callback (a2ui-tools--outcome host nil id))))
         (_ (funcall callback (a2ui-tools--result "error" "error" (format "Unknown tool %s" name)))))
     (error (funcall callback (a2ui-tools--result "error" "error" (error-message-string err))))))
 

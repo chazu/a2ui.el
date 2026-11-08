@@ -194,8 +194,8 @@
                                                                                "description" (plist-get s :description)
                                                                                "parameters" (plist-get s :parameters)))
                                                          (a2ui-tools-specs nil)))))))
-    ;; The four tools cost a few hundred tokens; the catalog comes on demand.
-    (should (< size 3200))))
+    ;; Keep the seven tools compact; the catalog comes on demand.
+    (should (< size 4800))))
 
 ;;;; MCP over HTTP
 
@@ -246,7 +246,8 @@ Emacs keeps serving requests while it waits."
     (should (= 202 (car (a2ui-hosts-test--http "POST" url "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"))))
     (let ((tools (gethash "tools" (gethash "result" (a2ui-hosts-test--rpc url "tools/list")))))
       (should (equal (mapcar (lambda (tool) (gethash "name" tool)) tools)
-                     '("render_a2ui" "update_a2ui" "a2ui_catalog" "a2ui_await_action")))
+                     '("render_a2ui" "update_a2ui" "a2ui_catalog" "a2ui_await_action"
+                       "save_a2ui" "list_a2ui" "recall_a2ui")))
       (should (equal (gethash "type" (gethash "inputSchema" (aref tools 0))) "object")))
     (should (= 405 (car (a2ui-hosts-test--http "GET" url))))
     (should (= 404 (car (a2ui-hosts-test--http "POST" (concat url "00") "{}"))))
@@ -311,7 +312,8 @@ Emacs keeps serving requests while it waits."
          (tools (a2ui-gptel-tools))
          (render (seq-find (lambda (tool) (equal (gptel-tool-name tool) "render_a2ui")) tools)))
     (should (equal (mapcar #'gptel-tool-name tools)
-                   '("render_a2ui" "update_a2ui" "a2ui_catalog" "a2ui_await_action")))
+                   '("render_a2ui" "update_a2ui" "a2ui_catalog" "a2ui_await_action"
+                     "save_a2ui" "list_a2ui" "recall_a2ui")))
     (should (gptel-tool-async render))
     (with-temp-buffer
       (should (equal (a2ui-hosts-test--gptel-call render a2ui-hosts-test--form)
@@ -412,7 +414,7 @@ Emacs keeps serving requests while it waits."
         (a2ui-tools-host-functions nil))
     (a2ui-gptel-enable)
     (a2ui-gptel-enable)
-    (should (= 4 (length gptel-tools)))))
+    (should (= 7 (length gptel-tools)))))
 
 ;;;; agent-shell
 

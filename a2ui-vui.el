@@ -78,6 +78,16 @@ network, so they show unless this is nil.  Hosts listed in
   :type 'boolean
   :group 'a2ui)
 
+(defcustom a2ui-vui-display-action '(a2ui-vui-display-in-main-window)
+  "How `display-buffer' shows standalone A2UI surfaces.
+By default, reuse the largest ordinary window in the selected frame,
+leaving side windows such as agent-shell alone.  An existing ordinary
+window showing the surface is preferred.  Display does not select it.
+Entries in `display-buffer-alist' take precedence.  Set this to nil
+to use Emacs's usual display behavior."
+  :type 'sexp
+  :group 'a2ui)
+
 (defcustom a2ui-trust-agent-display-name nil
   "When non-nil, show the surface theme's `agentDisplayName'.
 By default the header line names the agent from the session, which
@@ -1414,10 +1424,31 @@ Return its buffer."
   "Return a fresh buffer name for SURFACE-ID."
   (generate-new-buffer-name (format "*a2ui: %s*" surface-id)))
 
+(defun a2ui-vui-display-in-main-window (buffer alist)
+  "Display BUFFER in the main editing area, respecting action ALIST.
+Reuse an ordinary window already showing BUFFER, otherwise the largest
+non-dedicated, non-side window on the selected frame.  Return nil if
+none is available, allowing `display-buffer' to try its other actions."
+  (let* ((windows (seq-filter
+                   (lambda (window)
+                     (and (not (window-parameter window 'window-side))
+                          (not (window-dedicated-p window))
+                          (not (and (cdr (assq 'inhibit-same-window alist))
+                                    (eq window (selected-window))))))
+                   (window-list nil 'no-minibuffer)))
+         (target (or (seq-find (lambda (window) (eq (window-buffer window) buffer)) windows)
+                     (car (sort windows
+                                (lambda (a b)
+                                  (> (* (window-total-width a) (window-total-height a))
+                                     (* (window-total-width b) (window-total-height b)))))))))
+    (when target
+      (display-buffer-use-some-window
+       buffer (cons (cons 'some-window (lambda (_buffer _alist) target)) alist)))))
+
 (defun a2ui-show-surface (session surface-id)
   "Display SURFACE-ID of SESSION in its buffer, mounting it if needed.
-The buffer is shown with `display-buffer', so `display-buffer-alist'
-decides where.  Return the buffer."
+Use `a2ui-vui-display-action', unless `display-buffer-alist' overrides
+it.  Return the buffer."
   (a2ui-vui-attach session)
   (let ((buffer (car (a2ui-vui--view session surface-id))))
     (unless (buffer-live-p buffer)
@@ -1429,7 +1460,7 @@ decides where.  Return the buffer."
                                    :session session :surface-id surface-id)
                     buffer)
         (a2ui-surface-mode 1)))
-    (display-buffer buffer)
+    (display-buffer buffer a2ui-vui-display-action)
     buffer))
 
 (provide 'a2ui-vui)
