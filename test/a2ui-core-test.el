@@ -10,6 +10,17 @@
 (require 'ert)
 (require 'a2ui-core)
 
+(ert-deftest a2ui-json-encode-unicode-is-text ()
+  "Serialized JSON can be embedded in text without turning UTF-8 into raw bytes."
+  (let* ((value (a2ui-obj "name" "Zoë" "label" "日本語 🐈"))
+         (encoded (a2ui-json-encode value)))
+    (should (string-match-p "Zoë" encoded))
+    (with-temp-buffer
+      (insert encoded)
+      (let ((decoded (a2ui-json-parse (buffer-string))))
+        (should (equal (gethash "name" decoded) "Zoë"))
+        (should (equal (gethash "label" decoded) "日本語 🐈"))))))
+
 (defconst a2ui-test--fixtures
   (expand-file-name "fixtures" (file-name-directory (or load-file-name buffer-file-name))))
 

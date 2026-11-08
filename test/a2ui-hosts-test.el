@@ -254,6 +254,20 @@ Emacs keeps serving requests while it waits."
     (should (= 403 (car (a2ui-hosts-test--http "POST" url "{}" '("Origin: https://evil.example")))))
     (should (equal (gethash "code" (gethash "error" (a2ui-hosts-test--rpc url "frobnicate"))) -32601))))
 
+(ert-deftest a2ui-hosts-mcp-unicode-action ()
+  (skip-unless (executable-find "curl"))
+  (a2ui-hosts-test--with-mcp (host url)
+    (let ((args (a2ui-json-parse a2ui-hosts-test--form)))
+      (puthash "name" "Zoë 日本語 🐈" (gethash "data" args))
+      (a2ui-hosts-test--rpc url "tools/call" (a2ui-obj "name" "render_a2ui" "arguments" args)))
+    (a2ui-hosts-test--press host "f" "go")
+    (let* ((reply (a2ui-hosts-test--rpc url "tools/call"
+                                      (a2ui-obj "name" "a2ui_await_action" "arguments" (a2ui-obj))))
+           (text (gethash "text" (aref (gethash "content" (gethash "result" reply)) 0))))
+      (should (string-match-p "Zoë 日本語 🐈" text))
+      (let ((context (a2ui-json-parse (substring text (+ (string-search "Context: " text) 9)))))
+        (should (equal (gethash "name" context) "Zoë 日本語 🐈"))))))
+
 (ert-deftest a2ui-hosts-mcp-fixed-token ()
   (let ((a2ui-tools-host-functions nil))
     (let ((url (a2ui-mcp-register (a2ui-tools-host-create :name "fixed") "c0ffee")))

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 (2026-11-07)
+
+- Decode serialized JSON as text before embedding it in buffers or button-action messages, preserving non-ASCII field values over MCP and other transports on Emacs versions that return UTF-8 bytes.
+
 ## 0.2.0 (2026-11-07)
 
 - Standalone surfaces prefer the main editing area, reusing an ordinary window without replacing side windows or moving focus. Customize `a2ui-vui-display-action` to change placement. Inline conversation rendering remains opt-in.

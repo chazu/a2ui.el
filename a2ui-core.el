@@ -92,7 +92,11 @@ the MESSAGE and its METADATA (nil for incoming messages).")
 
 (defun a2ui-json-encode (value)
   "Serialize VALUE, an A2UI JSON value, to a JSON string."
-  (json-serialize (a2ui--jsonify value)))
+  (let ((json (json-serialize (a2ui--jsonify value))))
+    ;; Some Emacs versions return UTF-8 bytes.  Callers embed this JSON
+    ;; in buffers and action text; decode before those strings are mixed.
+    (if (multibyte-string-p json) json
+      (decode-coding-string json 'utf-8))))
 
 (defun a2ui-obj (&rest pairs)
   "Return a JSON object built from alternating keys and values in PAIRS."
