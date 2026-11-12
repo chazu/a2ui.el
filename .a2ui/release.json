@@ -1,0 +1,375 @@
+{
+  "format": "a2ui-library",
+  "version": 1,
+  "description": "a2ui.el release checklist.  After recall, fill /version, /bump ([\"patch\"|\"minor\"|\"major\"]), /date (YYYY-MM-DD), /commits ([{sha, subject}] from git log since the last tag), /changelog (a drafted CHANGELOG.md entry) and /intro (one line on what changed); leave /checks/* false until each is verified.  Actions: run_checks (run eldev test and eldev lint, check the Version: header, CHANGELOG.md, README and git status, then set the /checks that pass), show_commit {sha}, release {version, bump, date, changelog} (commit, tag vVERSION and push, after confirming with the user).",
+  "surface": {
+    "surfaceId": "release",
+    "catalogId": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1",
+    "theme": {
+      "agentDisplayName": "Release agent"
+    },
+    "sendDataModel": false,
+    "components": [
+      {
+        "id": "bump",
+        "component": "ChoicePicker",
+        "label": "Bump",
+        "variant": "mutuallyExclusive",
+        "displayStyle": "chips",
+        "options": [
+          {
+            "label": "patch",
+            "value": "patch"
+          },
+          {
+            "label": "minor",
+            "value": "minor"
+          },
+          {
+            "label": "major",
+            "value": "major"
+          }
+        ],
+        "value": {
+          "path": "/bump"
+        }
+      },
+      {
+        "id": "buttons",
+        "component": "Row",
+        "children": [
+          "run_checks",
+          "release_btn"
+        ]
+      },
+      {
+        "id": "changelog",
+        "component": "TextField",
+        "label": "Entry (Markdown)",
+        "variant": "longText",
+        "value": {
+          "path": "/changelog"
+        },
+        "checks": [
+          {
+            "condition": {
+              "call": "required",
+              "args": {
+                "value": {
+                  "path": "/changelog"
+                }
+              }
+            },
+            "message": "Write the CHANGELOG entry."
+          }
+        ]
+      },
+      {
+        "id": "changelog_sec",
+        "component": "Section",
+        "title": "CHANGELOG entry",
+        "child": "changelog"
+      },
+      {
+        "id": "check_changelog_file",
+        "component": "CheckBox",
+        "label": "CHANGELOG.md has the entry, dated",
+        "value": {
+          "path": "/checks/changelog_file"
+        }
+      },
+      {
+        "id": "check_header",
+        "component": "CheckBox",
+        "label": "Version: header in a2ui.el is bumped",
+        "value": {
+          "path": "/checks/header"
+        }
+      },
+      {
+        "id": "check_lint",
+        "component": "CheckBox",
+        "label": "eldev lint is clean",
+        "value": {
+          "path": "/checks/lint"
+        }
+      },
+      {
+        "id": "check_readme",
+        "component": "CheckBox",
+        "label": "README covers what's new",
+        "value": {
+          "path": "/checks/readme"
+        }
+      },
+      {
+        "id": "check_tests",
+        "component": "CheckBox",
+        "label": "eldev test passes",
+        "value": {
+          "path": "/checks/tests"
+        }
+      },
+      {
+        "id": "check_tree",
+        "component": "CheckBox",
+        "label": "On main, working tree clean",
+        "value": {
+          "path": "/checks/tree"
+        }
+      },
+      {
+        "id": "checklist",
+        "component": "Column",
+        "children": [
+          "check_tests",
+          "check_lint",
+          "check_header",
+          "check_changelog_file",
+          "check_readme",
+          "check_tree"
+        ]
+      },
+      {
+        "id": "checklist_sec",
+        "component": "Section",
+        "title": "Checklist",
+        "child": "checklist"
+      },
+      {
+        "id": "commits",
+        "component": "Table",
+        "rows": {
+          "path": "/commits"
+        },
+        "rowKey": "sha",
+        "columns": [
+          {
+            "label": "Commit",
+            "key": "sha"
+          },
+          {
+            "label": "Subject",
+            "key": "subject"
+          }
+        ],
+        "rowAction": {
+          "event": {
+            "name": "show_commit",
+            "context": {
+              "sha": {
+                "path": "sha"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "commits_sec",
+        "component": "Section",
+        "title": "Commits since the last tag (RET shows one)",
+        "child": "commits"
+      },
+      {
+        "id": "date",
+        "component": "DateTimeInput",
+        "label": "Release date",
+        "enableDate": true,
+        "value": {
+          "path": "/date"
+        }
+      },
+      {
+        "id": "file_changelog",
+        "component": "FileRef",
+        "path": "CHANGELOG.md",
+        "line": 1,
+        "label": "CHANGELOG.md"
+      },
+      {
+        "id": "file_header",
+        "component": "FileRef",
+        "path": "a2ui.el",
+        "line": 8,
+        "label": "a2ui.el: Version header"
+      },
+      {
+        "id": "files",
+        "component": "Row",
+        "children": [
+          "file_changelog",
+          "file_header"
+        ]
+      },
+      {
+        "id": "intro",
+        "component": "OrgText",
+        "text": {
+          "path": "/intro"
+        }
+      },
+      {
+        "id": "release_btn",
+        "component": "Button",
+        "child": "release_btn_label",
+        "variant": "primary",
+        "action": {
+          "event": {
+            "name": "release",
+            "context": {
+              "version": {
+                "path": "/version"
+              },
+              "bump": {
+                "path": "/bump"
+              },
+              "date": {
+                "path": "/date"
+              },
+              "changelog": {
+                "path": "/changelog"
+              }
+            }
+          }
+        },
+        "checks": [
+          {
+            "condition": {
+              "call": "and",
+              "args": {
+                "values": [
+                  {
+                    "path": "/checks/tests"
+                  },
+                  {
+                    "path": "/checks/lint"
+                  },
+                  {
+                    "path": "/checks/header"
+                  },
+                  {
+                    "path": "/checks/changelog_file"
+                  },
+                  {
+                    "path": "/checks/readme"
+                  },
+                  {
+                    "path": "/checks/tree"
+                  }
+                ]
+              }
+            },
+            "message": "Tick every check first."
+          },
+          {
+            "condition": {
+              "call": "regex",
+              "args": {
+                "value": {
+                  "path": "/version"
+                },
+                "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+              }
+            },
+            "message": "Set the version."
+          },
+          {
+            "condition": {
+              "call": "required",
+              "args": {
+                "value": {
+                  "path": "/changelog"
+                }
+              }
+            },
+            "message": "Write the CHANGELOG entry."
+          }
+        ]
+      },
+      {
+        "id": "release_btn_label",
+        "component": "Text",
+        "text": "Tag and push"
+      },
+      {
+        "id": "root",
+        "component": "Column",
+        "children": [
+          "title",
+          "intro",
+          "bump",
+          "version",
+          "date",
+          "commits_sec",
+          "changelog_sec",
+          "checklist_sec",
+          "files",
+          "buttons"
+        ]
+      },
+      {
+        "id": "run_checks",
+        "component": "Button",
+        "child": "run_checks_label",
+        "variant": "default",
+        "action": {
+          "event": {
+            "name": "run_checks",
+            "context": {}
+          }
+        }
+      },
+      {
+        "id": "run_checks_label",
+        "component": "Text",
+        "text": "Run checks for me"
+      },
+      {
+        "id": "title",
+        "component": "Text",
+        "text": "Release a2ui.el",
+        "variant": "h2"
+      },
+      {
+        "id": "version",
+        "component": "TextField",
+        "label": "Version",
+        "value": {
+          "path": "/version"
+        },
+        "checks": [
+          {
+            "condition": {
+              "call": "regex",
+              "args": {
+                "value": {
+                  "path": "/version"
+                },
+                "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+              }
+            },
+            "message": "A version like 1.2.3."
+          }
+        ]
+      }
+    ],
+    "data": {
+      "intro": "/Recalled from =.a2ui/release.json=.  Fill in the commits and a CHANGELOG draft, then tick the checks as they pass./",
+      "bump": [
+        "patch"
+      ],
+      "version": "",
+      "date": "",
+      "commits": [],
+      "changelog": "",
+      "checks": {
+        "tests": false,
+        "lint": false,
+        "header": false,
+        "changelog_file": false,
+        "readme": false,
+        "tree": false
+      }
+    }
+  }
+}

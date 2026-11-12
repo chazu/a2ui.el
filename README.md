@@ -9,9 +9,9 @@ Let AI agents draw native, interactive UI in Emacs: forms, tables, diffs and pic
 
 [A2UI](https://a2ui.org) is a protocol in which an agent describes UI as JSON (components, a data model, actions) instead of writing code. a2ui.el renders those surfaces with [vui.el](https://github.com/d12frosted/vui.el). You fill them in with normal editing keys, and the agent gets your answers when you press a button. Nothing the agent sends is ever evaluated as code.
 
-![An agent's review surface in Emacs: a blocked Merge, a folded section, a picker, then the action sent](docs/demo.gif)
+![An agent runs a Kubernetes rollout through one live surface in Emacs: pods and telemetry update each second, the new pods run out of memory, the agent pauses with a decision card, the patch is accepted and the rollout completes](examples/images/k8s-rollout.gif)
 
-*The `examples/code-review.jsonl` surface, driven by `scripts/demo-gif.el`. Section, Table, Diff, Picker and OrgText are from the Emacs catalog. In Emacs, faces come from your theme and `diff-mode`.*
+*`examples/k8s-rollout.el`: a scripted agent drives a simulated cluster through one surface, recorded from the real renderer. In Emacs, faces come from your theme. [More examples, with GIFs](examples/README.md).*
 
 ## Features
 
@@ -68,6 +68,21 @@ M-x a2ui-show-log
 ```
 
 Press `[Merge]` without picking a reviewer and the button refuses. Pick one, press it again, and the action appears in `*a2ui-log*`.
+
+## Examples
+
+[examples/README.md](examples/README.md) has a GIF and a description of each. None of them need an agent or an API key.
+
+- **A Kubernetes rollout, live** (`examples/k8s-rollout.el`, shown above). A scripted agent runs a simulated rollout through one surface that updates every second: pods, telemetry with sparklines, the PodDisruptionBudget and events. When the new pods run out of memory, it pauses and asks you what to do.
+- **Asking questions with a form** (`examples/intake-form.jsonl`). Instead of asking five questions in prose, an agent shows a form with its guesses filled in, and gets the whole spec back in one action.
+- **A saved release checklist** (`examples/release-checklist.jsonl`, saved as `.a2ui/release.json`). An agent working in this repository can recall it and fill it in from `git log`.
+- **A code review** (`examples/code-review.jsonl`), the Quick start surface.
+
+```elisp
+(load "/path/to/a2ui.el/examples/k8s-rollout.el")
+M-x a2ui-example-k8s-rollout
+M-x a2ui-replay-file RET examples/intake-form.jsonl RET
+```
 
 ## Connecting an agent
 
@@ -378,6 +393,8 @@ eldev lint && eldev lint doc       # package-lint and checkdoc
 eldev compile --warnings-as-errors
 python3 scripts/build-emacs-catalog.py   # regenerate catalogs/emacs/catalog.json
 eldev -p emacs --batch -l scripts/demo-gif.el -f a2ui-demo-gif-frames && python3 scripts/demo-gif.py   # docs/demo.gif
+eldev -p emacs --batch -l scripts/example-gifs.el -f a2ui-example-gifs && python3 scripts/demo-gif.py docs/{k8s-rollout,intake-form,release-checklist}-frames.json   # examples/images/
+eldev -p emacs --batch -l scripts/save-release-ui.el -f a2ui-save-release-ui   # .a2ui/release.json from the example
 ```
 
 `benchmarks/a2ui-bench.el` times rendering and typing into large surfaces. The `examples/agents/drive-*.el` files play the user against live agents in batch Emacs. `drive-gptel.el` takes `A2UI_GPTEL_BACKEND` (`ollama` or `openrouter`), `A2UI_GPTEL_MODEL` and `A2UI_GPTEL_CHAT`; `drive-agent-shell.el` takes `A2UI_PROMPT`.

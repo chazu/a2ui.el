@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- New examples: `examples/k8s-rollout.el` runs a simulated Kubernetes rollout through one live surface (pods, telemetry, PodDisruptionBudget, events, and a mid-run decision), `examples/intake-form.jsonl` asks an agent's clarifying questions as a form, and `examples/release-checklist.jsonl` is a release form also saved as `.a2ui/release.json` for recall.
+- `examples/README.md` shows each example as a GIF recorded from the real renderer by `scripts/example-gifs.el`; the rollout is now the README's demo. The GIF recorder keeps editable fields' text, places non-ASCII characters on the grid, and wraps long lines as an Emacs window does.
+
 ## 0.2.1 (2026-11-07)
 
 - Decode serialized JSON as text before embedding it in buffers or button-action messages, preserving non-ASCII field values over MCP and other transports on Emacs versions that return UTF-8 bytes.

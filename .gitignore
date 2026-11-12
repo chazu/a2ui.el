@@ -3,4 +3,4 @@
 *.elc
 *-autoloads.el
 *-pkg.el
-/docs/demo-frames.json
+/docs/*-frames.json

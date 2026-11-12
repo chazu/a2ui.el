@@ -9,7 +9,8 @@
 ;; written as JSON for scripts/demo-gif.py, which draws the GIF.
 ;; Load this file in batch Emacs through Eldev and call
 ;; `a2ui-demo-gif-frames', then run the Python script; the README's
-;; Development section has the commands.
+;; Development section has the commands.  scripts/example-gifs.el uses
+;; the same recorder for the examples' GIFs.
 
 ;;; Code:
 
@@ -22,6 +23,8 @@
     ("diff-header\\|diff-file-header\\|a2ui-emacs-file" . "file")
     ("a2ui-heading\\|org-level\\|a2ui-emacs-section" . "heading")
     ("a2ui-button-primary" . "primary")
+    ;; Before shadow: Org's code faces inherit from it.
+    ("org-code\\|org-verbatim" . "code")
     ("a2ui-button-inactive\\|a2ui-placeholder\\|a2ui-caption\\|shadow" . "shadow")
     ("font-lock-keyword\\|font-lock-builtin" . "keyword")
     ("font-lock-string\\|font-lock-doc" . "string")
@@ -31,7 +34,6 @@
     ("a2ui-link\\|org-link\\|\\`link" . "link")
     ("a2ui-rule" . "rule")
     ("widget-field\\|a2ui-field" . "field")
-    ("org-code\\|org-verbatim" . "code")
     ("italic" . "italic")
     ("bold" . "bold")
     ("button" . "button"))
@@ -49,7 +51,9 @@
                          (dolist (i (ensure-list (plist-get f :inherit))) (walk i)))
                         ((consp f) (mapc #'walk f)))))
       (walk (get-text-property pos 'face))
-      (walk (get-text-property pos 'font-lock-face)))
+      (walk (get-text-property pos 'font-lock-face))
+      ;; Editable fields get their face from an overlay.
+      (dolist (o (overlays-at pos)) (walk (overlay-get o 'face))))
     (nreverse out)))
 
 (defun a2ui-demo-gif--class (pos)
@@ -62,12 +66,15 @@
 (defvar a2ui-demo-gif--echo ""
   "The last message, shown in the echo area.")
 
-(defun a2ui-demo-gif--frame (buffer caption)
-  "Return a frame of BUFFER now, under CAPTION."
+(defun a2ui-demo-gif--frame (buffer caption &optional top rows delay)
+  "Return a frame of BUFFER now, under CAPTION.
+TOP and ROWS show only ROWS lines from line TOP (from 0), as a window
+scrolled there would.  DELAY is how long the frame stays, in 1/100 s."
   (with-current-buffer buffer
     (let ((root (vui-get-instance buffer)))
       (while (and root (vui-instance-render-timer root)) (sleep-for 0.01)))
-    (let ((lines nil) (cursor nil))
+    ;; Line ends would otherwise stop at the edge of an editable field.
+    (let ((inhibit-field-text-motion t) (lines nil) (cursor nil))
       (save-excursion
         (goto-char (point-min))
         (while (not (eobp))
@@ -80,12 +87,41 @@
                 (goto-char next)))
             (push (nreverse spans) lines)
             (forward-line 1))))
-      (setq cursor (list (1- (line-number-at-pos)) (current-column)))
+      (setq lines (nreverse lines)
+            cursor (list (- (line-number-at-pos) 1 (or top 0)) (current-column)))
+      (when top (setq lines (nthcdr top lines)))
+      (when rows (setq lines (seq-take lines rows)))
       (list :caption caption
             :header (a2ui-vui--header-line)
-            :lines (vconcat (mapcar #'vconcat (nreverse lines)))
-            :cursor (vconcat cursor)
-            :echo a2ui-demo-gif--echo))))
+            :lines (vconcat (mapcar #'vconcat lines))
+            :cursor (and (<= 0 (car cursor)) (< (car cursor) (length lines)) (vconcat cursor))
+            :echo a2ui-demo-gif--echo
+            :delay delay))))
+
+(defun a2ui-demo-gif--write (name meta frames)
+  "Write FRAMES, oldest first, with META to docs/NAME-frames.json.
+META is a plist: :title of the window, :cols, :rows, :output (the
+GIF's path) and :still (where to put the last frame as a PNG)."
+  (make-directory "docs" t)
+  (let ((coding-system-for-write 'utf-8-unix)
+        (file (format "docs/%s-frames.json" name)))
+    (with-temp-file file
+      (insert (a2ui-json-encode
+               (a2ui-obj "title" (plist-get meta :title)
+                         "cols" (plist-get meta :cols)
+                         "rows" (plist-get meta :rows)
+                         "output" (plist-get meta :output)
+                         "still" (plist-get meta :still)
+                         "frames" (vconcat
+                                   (mapcar (lambda (f)
+                                             (a2ui-obj "caption" (plist-get f :caption)
+                                                       "header" (plist-get f :header)
+                                                       "lines" (plist-get f :lines)
+                                                       "cursor" (plist-get f :cursor)
+                                                       "echo" (plist-get f :echo)
+                                                       "delay" (plist-get f :delay)))
+                                           frames))))))
+    (princ (format "wrote %s\n" file))))
 
 (defun a2ui-demo-gif-frames ()
   "Drive the review surface and write the frames to docs/demo-frames.json."
@@ -135,17 +171,9 @@
                         (a2ui-json-encode (a2ui-obj "name" (gethash "name" action)
                                                     "context" (gethash "context" action)))))
           (funcall shot buffer "The press goes to the agent with the resolved context"))))
-    (make-directory "docs" t)
-    (let ((coding-system-for-write 'utf-8-unix))
-     (with-temp-file "docs/demo-frames.json"
-      (insert (a2ui-json-encode (vconcat (mapcar (lambda (f)
-                                                   (a2ui-obj "caption" (plist-get f :caption)
-                                                             "header" (plist-get f :header)
-                                                             "lines" (plist-get f :lines)
-                                                             "cursor" (plist-get f :cursor)
-                                                             "echo" (plist-get f :echo)))
-                                                 (nreverse frames)))))))
-    (princ "wrote docs/demo-frames.json\n")))
+    (a2ui-demo-gif--write "demo" (list :title "*a2ui: review*" :cols 74
+                                       :output "docs/demo.gif" :still "docs/demo.png")
+                          (nreverse frames))))
 
 (provide 'demo-gif)
 ;;; demo-gif.el ends here
