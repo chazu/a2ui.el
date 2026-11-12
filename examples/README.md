@@ -28,7 +28,10 @@ While pods crash, too few are healthy for the PDB's `minAvailable: 5`, so it blo
 
 RET on a pod sends `describe_pod`, and the agent adds a `kubectl describe` view that stays live. You can also pause or roll back while the rollout runs. If you untick "pause and ask me", the agent rolls back on its own.
 
-The agent never redraws the surface. Each second it sends one data update. It changes the layout (the decision card, the pod detail, the buttons) by resending only the root's children, as `update_a2ui` lets a real agent do.
+The agent sends its components once. After that it only sends data, one update a second, made of three kinds of value:
+- **numbers**, which the Progress bar and the Table's bar and sparkline columns draw
+- **tones**, which colour the pod statuses, breached SLOs and the PDB
+- **`/view` flags**, which the components' `visible` is bound to, so the decision card, the pod detail and the buttons come and go without resending components
 
 ## Asking questions with a form
 
@@ -66,7 +69,7 @@ This is a2ui.el's own release form:
 
 `[Run checks for me]` asks the agent to run them and tick what passes.
 
-The form is also saved, with its data cleared, as [`.a2ui/release.json`](../.a2ui/release.json). An agent working in this repository finds it with `list_a2ui`. Ask it to *"bring back the release checklist"*, and it recalls the form and fills it in from `git log`, as the GIF shows. `scripts/save-release-ui.el` rebuilds the saved file from the example.
+The form is also saved, with its data cleared, as [`.a2ui/release.json`](../.a2ui/release.json). An agent working in this repository finds it with `list_a2ui`. Ask it to *"bring back the release checklist"*, and it recalls the form and fills it in from `git log`, as the GIF shows. Passing `data` to `recall_a2ui` does both in one call. `scripts/save-release-ui.el` rebuilds the saved file from the example.
 
 ## A code review
 

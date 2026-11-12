@@ -176,13 +176,23 @@ Report unreadable or unsupported files as entries with an error field."
               (error (a2ui-obj "name" name "error" (error-message-string err))))))
         (directory-files directory t "\\.json\\'"))))))
 
-(defun a2ui-library-recall (session name &optional surface-id)
+(defun a2ui-library-recall (session name &optional surface-id data)
   "Recall NAME into SESSION, optionally using SURFACE-ID; return its id.
-Validate before replacing any existing surface.  Buttons send actions
-to SESSION, and relative file references use SESSION's directory."
+DATA, a JSON object, replaces the saved data's top-level keys it
+names, so one call can recall a UI and fill it in.  Validate before
+replacing any existing surface.  Buttons send actions to SESSION, and
+relative file references use SESSION's directory."
+  (unless (or (null data) (hash-table-p data))
+    (signal 'a2ui-error '("data must be an object of top-level keys to replace")))
   (let* ((snapshot (a2ui-library--read (a2ui-library--file session name)))
          (surface (a2ui-library--validate session snapshot surface-id))
          (id (a2ui-surface-id surface)))
+    (when data
+      (let ((model (a2ui-surface-data surface)))
+        (unless (hash-table-p model)
+          (setq model (a2ui-obj))
+          (setf (a2ui-surface-data surface) model))
+        (maphash (lambda (k v) (puthash k v model)) data)))
     (setf (a2ui-surface-session surface) session)
     (puthash id surface (a2ui-session-surfaces session))
     (a2ui--notify session (list id))

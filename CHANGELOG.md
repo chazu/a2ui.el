@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Status colours: Text, the new Progress and Sparkline components, and Table cells (through a column's `toneKey`) take a `tone` of `success`, `warning`, `error` or `muted`, drawn with faces that follow your theme.
+- Gauges: Progress draws a bar with a label and a percentage or text; Sparkline draws a series on one line. A Table column with `display` `bar` or `sparkline` draws numbers the same way.
+- Any Emacs-catalog component takes `visible`, usually bound to data, to show or hide it without resending components.
+- Diff can let you pick hunks (`selection`), and offers `[Ediff]` against the file when it exists. Edits you make there come back to the agent as a diff (`edited`). The file itself is never changed.
+- While an agent waits in `a2ui_await_action`, the mode line shows "a2ui: waiting", and you get a message (or, with `a2ui-waiting-notify` set to `desktop`, a notification) when its surface is off screen. `a2ui-goto-waiting` takes you to it. Packages can use `a2ui-waiting-functions` and `a2ui-waiting-change-hook`.
+- `recall_a2ui` takes `data`, replacing the saved values of the top-level keys it names, to recall and fill in a UI in one call.
 - New examples: `examples/k8s-rollout.el` runs a simulated Kubernetes rollout through one live surface (pods, telemetry, PodDisruptionBudget, events, and a mid-run decision), `examples/intake-form.jsonl` asks an agent's clarifying questions as a form, and `examples/release-checklist.jsonl` is a release form also saved as `.a2ui/release.json` for recall.
 - `examples/README.md` shows each example as a GIF recorded from the real renderer by `scripts/example-gifs.el`; the rollout is now the README's demo. The GIF recorder keeps editable fields' text, places non-ASCII characters on the grid, and wraps long lines as an Emacs window does.
 

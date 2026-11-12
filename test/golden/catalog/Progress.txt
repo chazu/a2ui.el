@@ -1,0 +1,9 @@
+=== s
+█████░░░░░░░░░░░░░░░ 25%
+Pods: █████████████░░░░░░░ 4/6 ready
+Disk: ████████████████████ 100%
+--- faces
+a2ui-emacs-bar-empty: ░░░░░░░░░░░░░░░
+a2ui-tone-success: █████████████
+a2ui-emacs-bar-empty: ░░░░░░░
+a2ui-tone-error: ████████████████████

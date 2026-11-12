@@ -29,9 +29,11 @@
 ;;    autoscaler from draining a node, because too few pods are healthy.
 ;; 4. Whatever you pick, the agent carries it through and summarizes.
 ;;
-;; The surface changes shape as it goes (the decision card, the pod
-;; detail, the buttons come and go) by the agent resending only the
-;; root's children, as `update_a2ui' lets a real agent do.
+;; The agent sends every component once.  After that it only sends
+;; data: numbers that Progress, the Table's bar and sparkline columns
+;; draw, tones for status colours, and /view flags that the
+;; components' `visible' is bound to, so the decision card, the pod
+;; detail and the buttons come and go without resending components.
 
 ;;; Code:
 
@@ -235,7 +237,7 @@ spare, except that old pods which are not ready go at once."
           (a2ui-k8s--terminate w pod)))))))
 
 (defun a2ui-k8s--autoscaler (w)
-  "Let the cluster-autoscaler try to drain its node, as the PDB allows."
+  "Let the cluster-autoscaler in W try to drain its node, as the PDB allows."
   (let ((next (a2ui-k8s-world-drain-next w))
         (node (concat "node/" a2ui-k8s--drain-node)))
     (when (and next (>= (a2ui-k8s-world-tick w) next))
@@ -336,20 +338,6 @@ from recent OOMKills on this side."
         ((< seconds 172800) (format "%dh" (/ seconds 3600)))
         (t (format "%dd" (/ seconds 86400)))))
 
-(defun a2ui-k8s--bar (value max width)
-  "Return a WIDTH-cell bar filled to VALUE of MAX."
-  (let ((n (min width (max 0 (round (* width (/ (float value) (max 1 max))))))))
-    (concat (make-string n ?█) (make-string (- width n) ?░))))
-
-(defun a2ui-k8s--spark (values hi)
-  "Return a sparkline of VALUES, oldest first, scaled to HI; nil is a gap."
-  (let ((bars "▁▂▃▄▅▆▇█"))
-    (mapconcat (lambda (v)
-                 (if v
-                     (string (aref bars (max 0 (min 7 (floor (* 8 (/ (float v) hi)))))))
-                   " "))
-               values "")))
-
 (defun a2ui-k8s--series (w side key)
   "Return the last `a2ui-k8s--history' values of KEY on SIDE in W, oldest first."
   (let ((values (mapcar (lambda (h) (plist-get (plist-get h side) key))
@@ -365,7 +353,7 @@ from recent OOMKills on this side."
 ;;;; The agent
 
 (cl-defstruct (a2ui-k8s-run (:constructor a2ui-k8s--run) (:copier nil))
-  session world (phase 'plan) timer (ask t) steps root
+  session world (phase 'plan) timer (ask t) steps view
   original (tolerated 0) resumed rolled-back fixed hide-fix
   verify-left detail-pod pause-reason)
 
@@ -398,81 +386,105 @@ VARIANT is its variant; CONTEXT its action context."
                                                           "context" (or context (a2ui-obj)))))))
 
 (defun a2ui-k8s--table (id rows columns &rest props)
-  "Return Table ID over data ROWS with COLUMNS, (LABEL KEY [ALIGN])..., and PROPS."
+  "Return Table ID over data ROWS with COLUMNS and PROPS.
+Each column is (LABEL KEY [ALIGN] . PLIST), PLIST giving more of its
+properties, such as :toneKey \"tone\"."
   (apply #'a2ui-k8s--c id "Table" "rows" (a2ui-k8s--p rows)
-         "columns" (vconcat (mapcar (pcase-lambda (`(,label ,key ,align))
-                                      (a2ui-obj "label" label "key" key "align" (or align "left")))
+         "columns" (vconcat (mapcar (pcase-lambda (`(,label ,key ,align . ,more))
+                                      (let ((column (a2ui-obj "label" label "key" key "align" (or align "left"))))
+                                        (cl-loop for (k v) on more by #'cddr
+                                                 do (puthash (substring (symbol-name k) 1) v column))
+                                        column))
                                     columns))
          props))
+
+(defun a2ui-k8s--shown (id component)
+  "Return COMPONENT shown only while /view/ID is true."
+  (puthash "visible" (a2ui-k8s--p (concat "/view/" id)) component)
+  component)
 
 (defun a2ui-k8s--section (id title child &optional collapsed)
   "Return Section ID titled TITLE around CHILD, COLLAPSED or not."
   (a2ui-k8s--c id "Section" "title" title "child" child "collapsed" (a2ui-bool collapsed)))
 
+(defconst a2ui-k8s--root
+  ["title" "subtitle" "status" "progress" "decision_card" "note" "plan_sec" "change_sec"
+   "options_sec" "plan_buttons" "rs_sec" "pods_sec" "detail_sec" "telemetry_sec" "pdb_sec"
+   "events_sec" "run_buttons"]
+  "Everything the surface ever shows, in order; /view decides what is.")
+
 (defun a2ui-k8s--components ()
   "Return every component the surface ever shows."
   (append
    (list
-    (a2ui-k8s--c "root" "Column" "children" ["title"])
+    (a2ui-k8s--c "root" "Column" "children" a2ui-k8s--root)
     (a2ui-k8s--c "title" "Text" "variant" "h2" "text" "Rollout: prod/checkout-api 2.13.4 → 2.14.0")
-    (a2ui-k8s--c "subtitle" "Text" "variant" "caption"
-                 "text" "Deployment · 6 replicas · RollingUpdate, maxUnavailable 0 · PDB checkout-api-pdb minAvailable 5")
-    (a2ui-k8s--c "status" "Text" "text" (a2ui-k8s--p "/live/status"))
-    (a2ui-k8s--c "progress" "Text" "variant" "caption" "text" (a2ui-k8s--p "/live/progress"))
+    (a2ui-k8s--shown "plan"
+     (a2ui-k8s--c "subtitle" "Text" "variant" "caption"
+                  "text" "Deployment · 6 replicas · RollingUpdate, maxUnavailable 0 · PDB checkout-api-pdb minAvailable 5"))
+    (a2ui-k8s--shown "run"
+     (a2ui-k8s--c "status" "Text" "text" (a2ui-k8s--p "/live/status") "tone" (a2ui-k8s--p "/live/statusTone")))
+    (a2ui-k8s--shown "run"
+     (a2ui-k8s--c "progress" "Progress" "label" "Updated" "value" (a2ui-k8s--p "/live/ready") "max" 6
+                  "text" (a2ui-k8s--p "/live/progress") "tone" (a2ui-k8s--p "/live/progressTone")))
     (a2ui-k8s--c "note" "OrgText" "text" (a2ui-k8s--p "/note"))
-    (a2ui-k8s--section "plan_sec" "Plan" "plan_table")
-    (a2ui-k8s--table "plan_table" "/plan" '(("" "status") ("Step" "step") ("Detail" "detail")))
-    (a2ui-k8s--section "change_sec" "Change" "manifest_diff")
+    (a2ui-k8s--shown "steps" (a2ui-k8s--section "plan_sec" "Plan" "plan_table"))
+    (a2ui-k8s--table "plan_table" "/plan" '(("" "status" nil :toneKey "tone") ("Step" "step") ("Detail" "detail")))
+    (a2ui-k8s--shown "plan" (a2ui-k8s--section "change_sec" "Change" "manifest_diff"))
     (a2ui-k8s--c "manifest_diff" "Diff" "file" "k8s/checkout-api/deployment.yaml"
                  "diff" (a2ui-k8s--p "/manifest"))
-    (a2ui-k8s--section "options_sec" "Options" "options_col")
+    (a2ui-k8s--shown "plan" (a2ui-k8s--section "options_sec" "Options" "options_col"))
     (a2ui-k8s--c "options_col" "Column" "children" ["surge" "ask"])
     (a2ui-k8s--c "surge" "Slider" "label" "maxSurge" "min" 1 "max" 3 "value" (a2ui-k8s--p "/options/surge"))
     (a2ui-k8s--c "ask" "CheckBox" "value" (a2ui-k8s--p "/options/ask")
                  "label" "If incoming pods breach their SLOs, pause and ask me (otherwise roll back)")
-    (a2ui-k8s--c "plan_buttons" "Row" "children" ["start" "cancel"])
-    (a2ui-k8s--section "rs_sec" "ReplicaSets" "rs_table")
+    (a2ui-k8s--shown "plan" (a2ui-k8s--c "plan_buttons" "Row" "children" ["start" "cancel"]))
+    (a2ui-k8s--shown "run" (a2ui-k8s--section "rs_sec" "ReplicaSets" "rs_table"))
     (a2ui-k8s--table "rs_table" "/live/rses"
                      '(("ReplicaSet" "name") ("Rev" "rev" "right") ("Image" "image") ("Mem limit" "limit")
                        ("Desired" "desired" "right") ("Current" "current" "right")
-                       ("Ready" "ready" "right") ("Role" "role")))
-    (a2ui-k8s--section "pods_sec" "Pods (RET on a pod describes it)" "pods_table")
+                       ("Ready" "ready" "right" :toneKey "readyTone") ("Role" "role")))
+    (a2ui-k8s--shown "run" (a2ui-k8s--section "pods_sec" "Pods (RET on a pod describes it)" "pods_table"))
     (a2ui-k8s--table "pods_table" "/live/pods"
-                     '(("Pod" "pod") ("Rev" "rev" "right") ("Status" "status") ("Ready" "ready")
-                       ("Restarts" "restarts" "right") ("Memory" "memory") ("Node" "node")
-                       ("Age" "age" "right"))
+                     '(("Pod" "pod") ("Rev" "rev" "right") ("Status" "status" nil :toneKey "tone")
+                       ("Ready" "ready") ("Restarts" "restarts" "right" :toneKey "restartTone")
+                       ("Memory" "memoryUsed" nil :display "bar" :toneKey "memoryTone")
+                       ("" "memory" "right" :toneKey "memoryTone") ("Node" "node") ("Age" "age" "right"))
                      "rowKey" "pod"
                      "rowAction" (a2ui-obj "event" (a2ui-obj "name" "describe_pod"
                                                              "context" (a2ui-obj "pod" (a2ui-k8s--p "pod")))))
-    (a2ui-k8s--section "detail_sec" (a2ui-k8s--p "/detail/title") "detail_col")
+    (a2ui-k8s--shown "detail" (a2ui-k8s--section "detail_sec" (a2ui-k8s--p "/detail/title") "detail_col"))
     (a2ui-k8s--c "detail_col" "Column" "children" ["detail_code" "hide_detail"])
     (a2ui-k8s--c "detail_code" "Code" "text" (a2ui-k8s--p "/detail/text"))
-    (a2ui-k8s--section "telemetry_sec" "Telemetry (trend: incoming pods, last 20s)" "telemetry_table")
+    (a2ui-k8s--shown "run" (a2ui-k8s--section "telemetry_sec" "Telemetry (trend: incoming pods, last 20s)" "telemetry_table"))
     (a2ui-k8s--c "telemetry_table" "Table" "rows" (a2ui-k8s--p "/live/telemetry")
                  "columns" (vector (a2ui-obj "label" "Metric" "key" "metric")
                                    (a2ui-obj "label" (a2ui-k8s--p "/labels/out") "key" "out" "align" "right")
-                                   (a2ui-obj "label" (a2ui-k8s--p "/labels/in") "key" "in" "align" "right")
-                                   (a2ui-obj "label" "Trend" "key" "trend")
+                                   (a2ui-obj "label" (a2ui-k8s--p "/labels/in") "key" "in" "align" "right"
+                                             "toneKey" "tone")
+                                   (a2ui-obj "label" "Trend" "key" "trend" "display" "sparkline"
+                                             "min" 0 "max" 1 "toneKey" "tone")
                                    (a2ui-obj "label" "SLO" "key" "slo")
-                                   (a2ui-obj "label" "" "key" "ok")))
-    (a2ui-k8s--section "pdb_sec" "PodDisruptionBudget" "pdb_col")
+                                   (a2ui-obj "label" "" "key" "ok" "toneKey" "tone")))
+    (a2ui-k8s--shown "run" (a2ui-k8s--section "pdb_sec" "PodDisruptionBudget" "pdb_col"))
     (a2ui-k8s--c "pdb_col" "Column" "children" ["pdb_table" "pdb_hint"])
     (a2ui-k8s--table "pdb_table" "/live/pdb"
                      '(("PDB" "name") ("Min available" "min" "right") ("Healthy" "healthy" "right")
-                       ("Disruptions allowed" "allowed" "right") ("Node drain" "drain")))
+                       ("Disruptions allowed" "allowed" "right" :toneKey "tone") ("Node drain" "drain" nil :toneKey "tone")))
     (a2ui-k8s--c "pdb_hint" "Text" "variant" "caption"
                  "text" "A PDB gates evictions, such as a node drain, not the Deployment's own rollout; maxUnavailable 0 protects that.")
-    (a2ui-k8s--section "events_sec" "Events" "events")
+    (a2ui-k8s--shown "run" (a2ui-k8s--section "events_sec" "Events" "events"))
     (a2ui-k8s--c "events" "Code" "text" (a2ui-k8s--p "/live/events"))
-    (a2ui-k8s--c "decision_card" "Card" "child" "decision_col")
+    (a2ui-k8s--shown "decision" (a2ui-k8s--c "decision_card" "Card" "child" "decision_col"))
     (a2ui-k8s--c "decision_col" "Column" "children" ["decision_title" "decision_text" "fix" "decision_buttons"])
-    (a2ui-k8s--c "decision_title" "Text" "variant" "h3" "text" "⏸ Paused: your call")
+    (a2ui-k8s--c "decision_title" "Text" "variant" "h3" "text" "⏸ Paused: your call" "tone" "warning")
     (a2ui-k8s--c "decision_text" "OrgText" "text" (a2ui-k8s--p "/decision/text"))
-    (a2ui-k8s--c "fix" "Diff" "file" "k8s/checkout-api/deployment.yaml" "diff" (a2ui-k8s--p "/decision/diff")
-                 "acceptAction" (a2ui-obj "event" (a2ui-obj "name" "apply_fix"))
-                 "rejectAction" (a2ui-obj "event" (a2ui-obj "name" "reject_fix")))
+    (a2ui-k8s--shown "fix"
+     (a2ui-k8s--c "fix" "Diff" "file" "k8s/checkout-api/deployment.yaml" "diff" (a2ui-k8s--p "/decision/diff")
+                  "acceptAction" (a2ui-obj "event" (a2ui-obj "name" "apply_fix"))
+                  "rejectAction" (a2ui-obj "event" (a2ui-obj "name" "reject_fix"))))
     (a2ui-k8s--c "decision_buttons" "Row" "children" ["resume" "undo"])
-    (a2ui-k8s--c "run_buttons" "Row" "children" ["pause" "abort"])
+    (a2ui-k8s--shown "buttons" (a2ui-k8s--c "run_buttons" "Row" "children" ["pause" "abort"]))
     (a2ui-k8s--c "pause" "Button" "child" "pause_label" "variant" "default"
                  "action" (a2ui-obj "event" (a2ui-obj "name" "toggle_pause")))
     (a2ui-k8s--c "pause_label" "Text" "text" (a2ui-k8s--p "/live/pauseLabel")))
@@ -515,8 +527,12 @@ VARIANT is its variant; CONTEXT its action context."
 
 (defun a2ui-k8s--steps-data (run)
   "Return RUN's plan as table rows."
-  (vconcat (mapcar (lambda (s) (a2ui-obj "status" (plist-get s :status) "step" (plist-get s :step)
-                                         "detail" (plist-get s :detail)))
+  (vconcat (mapcar (lambda (s)
+                     (let ((status (plist-get s :status)))
+                       (a2ui-obj "status" status "step" (plist-get s :step) "detail" (plist-get s :detail)
+                                 "tone" (pcase status
+                                          ("✓" "success") ("✗" "error") ((or "⏸" "⚠") "warning")
+                                          ((or "·" "–") "muted") (_ nil)))))
                    (a2ui-k8s-run-steps run))))
 
 (defun a2ui-k8s--set-step (run id status &optional detail)
@@ -538,31 +554,24 @@ VARIANT is its variant; CONTEXT its action context."
         (push (list :id id :step step :status status :detail detail) out)))
     (setf (a2ui-k8s-run-steps run) (nreverse out))))
 
-(defun a2ui-k8s--root-children (run)
-  "Return the root's children for RUN's phase."
-  (pcase (a2ui-k8s-run-phase run)
-    ('plan ["title" "subtitle" "note" "plan_sec" "change_sec" "options_sec" "plan_buttons"])
-    ('cancelled ["title" "note"])
-    (phase
-     (vconcat '("title" "status" "progress")
-              (when (eq phase 'decision) '("decision_card"))
-              '("note" "plan_sec" "rs_sec" "pods_sec")
-              (when (a2ui-k8s-run-detail-pod run) '("detail_sec"))
-              '("telemetry_sec" "pdb_sec" "events_sec")
-              (when (memq phase '(rolling verify)) '("run_buttons"))))))
+(defun a2ui-k8s--view (run)
+  "Return what RUN's surface shows now, as /view flags."
+  (let ((phase (a2ui-k8s-run-phase run)))
+    (a2ui-obj "plan" (a2ui-bool (eq phase 'plan))
+              "steps" (a2ui-bool (not (eq phase 'cancelled)))
+              "run" (a2ui-bool (memq phase '(rolling decision verify done)))
+              "decision" (a2ui-bool (eq phase 'decision))
+              "fix" (a2ui-bool (not (a2ui-k8s-run-hide-fix run)))
+              "detail" (a2ui-bool (and (a2ui-k8s-run-detail-pod run) (not (eq phase 'plan))))
+              "buttons" (a2ui-bool (memq phase '(rolling verify))))))
 
 (defun a2ui-k8s--layout (run)
-  "Resend the root's and the decision card's children when they changed."
-  (let ((root (a2ui-k8s--root-children run))
-        (decision (if (a2ui-k8s-run-hide-fix run)
-                      ["decision_title" "decision_text" "decision_buttons"]
-                    ["decision_title" "decision_text" "fix" "decision_buttons"])))
-    (unless (equal (cons root decision) (a2ui-k8s-run-root run))
-      (setf (a2ui-k8s-run-root run) (cons root decision))
-      (a2ui-k8s--send run "updateComponents"
-                      (a2ui-obj "components"
-                                (vector (a2ui-k8s--c "root" "Column" "children" root)
-                                        (a2ui-k8s--c "decision_col" "Column" "children" decision)))))))
+  "Send RUN's /view when what the surface shows has changed.
+The components never change; their `visible' is bound to /view."
+  (let ((view (a2ui-k8s--view run)))
+    (unless (equal (a2ui-json-encode view) (a2ui-k8s-run-view run))
+      (setf (a2ui-k8s-run-view run) (a2ui-json-encode view))
+      (a2ui-k8s--data run "/view" view))))
 
 (defun a2ui-k8s--note (run text)
   "Show TEXT, Org markup, as the agent's note on RUN."
@@ -584,15 +593,21 @@ VARIANT is its variant; CONTEXT its action context."
            (format "⟳ Progressing towards revision %d (%s, %dMi limit)"
                    (a2ui-k8s-rs-revision target) (a2ui-k8s-rs-image target) (a2ui-k8s-rs-limit target)))))))
 
+(defun a2ui-k8s--status-tone (run)
+  "Return the tone of RUN's status line."
+  (pcase (a2ui-k8s-run-phase run)
+    ('decision "warning")
+    ((or 'verify 'done) (if (a2ui-k8s-run-rolled-back run) "warning" "success"))
+    (_ (and (a2ui-k8s-world-paused (a2ui-k8s-run-world run)) "warning"))))
+
 (defun a2ui-k8s--progress (w)
-  "Return the progress line of world W."
+  "Return the text beside the progress bar of world W."
   (let* ((target (a2ui-k8s-world-target w))
          (replicas (a2ui-k8s-world-replicas w))
          (updated (length (a2ui-k8s--live w target)))
          (ready (seq-count #'a2ui-k8s-pod-ready (a2ui-k8s--live w target))))
-    (format "Updated %s %d/%d   Ready %d/%d   Available %d/%d   t+%ds"
-            (a2ui-k8s--bar ready replicas 12) updated replicas ready replicas
-            (a2ui-k8s--healthy w) replicas (a2ui-k8s-world-tick w))))
+    (format "%d/%d updated · %d/%d ready · %d/%d available · t+%ds"
+            updated replicas ready replicas (a2ui-k8s--healthy w) replicas (a2ui-k8s-world-tick w))))
 
 (defun a2ui-k8s--pods-data (w)
   "Return W's pods as table rows."
@@ -602,18 +617,23 @@ VARIANT is its variant; CONTEXT its action context."
                (a2ui-obj "pod" (a2ui-k8s-pod-name p)
                          "rev" (a2ui-k8s-rs-revision rs)
                          "status" (pcase (a2ui-k8s-pod-phase p)
-                                    ("OOMKilled" "✗ OOMKilled")
-                                    ("CrashLoopBackOff" "✗ CrashLoopBackOff")
-                                    ("Running" (if (a2ui-k8s-pod-ready p) "● Running" "○ Running"))
-                                    (phase (concat "· " phase)))
+                                    ((or "OOMKilled" "CrashLoopBackOff" "Terminating") (a2ui-k8s-pod-phase p))
+                                    ("Running" (if (a2ui-k8s-pod-ready p) "Running" "Running, not ready"))
+                                    (phase phase))
+                         "tone" (pcase (a2ui-k8s-pod-phase p)
+                                  ((or "OOMKilled" "CrashLoopBackOff") "error")
+                                  ("Running" (if (a2ui-k8s-pod-ready p) "success" "warning"))
+                                  (_ "muted"))
                          "ready" (if (a2ui-k8s-pod-ready p) "1/1" "0/1")
                          "restarts" (a2ui-k8s-pod-restarts p)
+                         "restartTone" (and (> (a2ui-k8s-pod-restarts p) 0) "error")
+                         ;; The agent sends numbers; the Table draws the bar.
+                         "memoryUsed" (and (> (a2ui-k8s-pod-memory p) 0)
+                                           (/ (a2ui-k8s-pod-memory p) (float (a2ui-k8s-rs-limit rs))))
                          "memory" (if (> (a2ui-k8s-pod-memory p) 0)
-                                      (format "%s %3d/%dMi%s"
-                                              (a2ui-k8s--bar (a2ui-k8s-pod-memory p) (a2ui-k8s-rs-limit rs) 6)
-                                              (round (a2ui-k8s-pod-memory p)) (a2ui-k8s-rs-limit rs)
-                                              (if (a2ui-k8s--pressured-p p) " ⚠" ""))
+                                      (format "%d/%dMi" (round (a2ui-k8s-pod-memory p)) (a2ui-k8s-rs-limit rs))
                                     "")
+                         "memoryTone" (and (a2ui-k8s--pressured-p p) "warning")
                          "node" (a2ui-k8s-pod-node p)
                          "age" (a2ui-k8s--age (a2ui-k8s-pod-age p)))))
            (seq-sort-by (lambda (p) (list (a2ui-k8s-rs-revision (a2ui-k8s-pod-rs p)) (a2ui-k8s-pod-name p)))
@@ -630,6 +650,7 @@ VARIANT is its variant; CONTEXT its action context."
                          "image" (a2ui-k8s-rs-image rs) "limit" (format "%dMi" (a2ui-k8s-rs-limit rs))
                          "desired" (a2ui-k8s-rs-desired rs) "current" (length live)
                          "ready" (seq-count #'a2ui-k8s-pod-ready live)
+                         "readyTone" (and (< (seq-count #'a2ui-k8s-pod-ready live) (length live)) "warning")
                          "role" (cond ((eq rs (a2ui-k8s-world-target w)) "◀ incoming")
                                       ((> (+ (a2ui-k8s-rs-desired rs) (length live)) 0) "outgoing")
                                       (t "")))))
@@ -638,6 +659,10 @@ VARIANT is its variant; CONTEXT its action context."
                                         (seq-find (lambda (p) (eq (a2ui-k8s-pod-rs p) rs))
                                                   (a2ui-k8s-world-pods w))))
                        (a2ui-k8s-world-rses w)))))
+
+(defun a2ui-k8s--trend (w key hi)
+  "Return the incoming pods' recent KEY in W as fractions of HI, oldest first."
+  (vconcat (mapcar (lambda (v) (and v (/ v (float hi)))) (a2ui-k8s--series w :in key))))
 
 (defun a2ui-k8s--telemetry-data (w)
   "Return W's telemetry as table rows."
@@ -648,22 +673,21 @@ VARIANT is its variant; CONTEXT its action context."
          (restarts (apply #'+ (mapcar #'a2ui-k8s-pod-restarts (a2ui-k8s--live w target))))
          (fmt (lambda (side key format)
                 (let ((v (plist-get side key))) (if v (format format v) "—"))))
-         (ok (lambda (v limit) (cond ((null v) "") ((< v limit) "✓") (t "✗")))))
+         (row (lambda (metric key format trend slo limit)
+                (let* ((v (plist-get in key))
+                       (bad (and v limit (>= v limit))))
+                  (a2ui-obj "metric" metric "out" (funcall fmt out key format) "in" (funcall fmt in key format)
+                            "trend" trend "slo" slo
+                            "ok" (cond ((or (null v) (null limit)) "") (bad "✗") (t "✓"))
+                            "tone" (cond ((or (null v) (null limit)) nil) (bad "error") (t "success")))))))
     (vector
-     (a2ui-obj "metric" "Requests/s" "out" (funcall fmt out :rps "%.0f") "in" (funcall fmt in :rps "%.0f")
-               "trend" (a2ui-k8s--spark (a2ui-k8s--series w :in :rps) 1300) "slo" "" "ok" "")
-     (a2ui-obj "metric" "5xx rate" "out" (funcall fmt out :err "%.2f%%") "in" (funcall fmt in :err "%.2f%%")
-               "trend" (a2ui-k8s--spark (a2ui-k8s--series w :in :err) 5) "slo" "< 1%"
-               "ok" (funcall ok (plist-get in :err) 1.0))
-     (a2ui-obj "metric" "p99 latency" "out" (funcall fmt out :p99 "%.0f ms") "in" (funcall fmt in :p99 "%.0f ms")
-               "trend" (a2ui-k8s--spark (a2ui-k8s--series w :in :p99) 1000) "slo" "< 400 ms"
-               "ok" (funcall ok (plist-get in :p99) 400))
-     (a2ui-obj "metric" "Memory (mean)" "out" (funcall fmt out :mem "%.0fMi") "in" (funcall fmt in :mem "%.0fMi")
-               "trend" (a2ui-k8s--spark (a2ui-k8s--series w :in :mem) (a2ui-k8s-rs-limit target))
-               "slo" (format "< %dMi" (a2ui-k8s-rs-limit target))
-               "ok" (funcall ok (plist-get in :mem) (* 0.88 (a2ui-k8s-rs-limit target))))
-     (a2ui-obj "metric" "Restarts" "out" "" "in" (number-to-string restarts)
-               "trend" "" "slo" "0" "ok" (if (zerop restarts) "✓" "✗")))))
+     (funcall row "Requests/s" :rps "%.0f" (a2ui-k8s--trend w :rps 1300) "" nil)
+     (funcall row "5xx rate" :err "%.2f%%" (a2ui-k8s--trend w :err 5) "< 1%" 1.0)
+     (funcall row "p99 latency" :p99 "%.0f ms" (a2ui-k8s--trend w :p99 1000) "< 400 ms" 400)
+     (funcall row "Memory (mean)" :mem "%.0fMi" (a2ui-k8s--trend w :mem (a2ui-k8s-rs-limit target))
+              (format "< %dMi" (a2ui-k8s-rs-limit target)) (* 0.88 (a2ui-k8s-rs-limit target)))
+     (a2ui-obj "metric" "Restarts" "out" "" "in" (number-to-string restarts) "trend" "" "slo" "0"
+               "ok" (if (zerop restarts) "✓" "✗") "tone" (if (zerop restarts) "success" "error")))))
 
 (defun a2ui-k8s--pdb-data (w)
   "Return W's PodDisruptionBudget as a table row."
@@ -676,7 +700,10 @@ VARIANT is its variant; CONTEXT its action context."
                                           (> (a2ui-k8s-world-blocked w) 0))
                                      (format "✗ blocked by PDB (%d %s)" (a2ui-k8s-world-blocked w)
                                              (if (= 1 (a2ui-k8s-world-blocked w)) "try" "tries")))
-                                    (t (format "draining %s" a2ui-k8s--drain-node)))))))
+                                    (t (format "draining %s" a2ui-k8s--drain-node)))
+                      "tone" (cond ((a2ui-k8s-world-drained w) "success")
+                                   ((<= healthy (a2ui-k8s-world-min-available w)) "error")
+                                   (t "muted"))))))
 
 (defun a2ui-k8s--events-text (w)
   "Return W's newest events as kubectl would print them."
@@ -720,7 +747,10 @@ VARIANT is its variant; CONTEXT its action context."
       (a2ui-k8s--data
        run "/live"
        (a2ui-obj "status" (a2ui-k8s--status run)
+                 "statusTone" (a2ui-k8s--status-tone run)
+                 "ready" (seq-count #'a2ui-k8s-pod-ready (a2ui-k8s--live w (a2ui-k8s-world-target w)))
                  "progress" (a2ui-k8s--progress w)
+                 "progressTone" (a2ui-k8s--status-tone run)
                  "rses" (a2ui-k8s--rses-data w)
                  "pods" (a2ui-k8s--pods-data w)
                  "telemetry" (a2ui-k8s--telemetry-data w)

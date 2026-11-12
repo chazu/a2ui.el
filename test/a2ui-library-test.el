@@ -198,5 +198,26 @@
             (should (string-match-p "Ada" (car (a2ui-tools-host-queue fresh)))))
         (when (buffer-live-p buffer) (kill-buffer buffer))))))
 
+(ert-deftest a2ui-library-recall-with-data ()
+  (a2ui-library-test--with-library
+    (a2ui-hosts-test--call host "render_a2ui" a2ui-hosts-test--form)
+    (let ((surface (a2ui-session-surface (a2ui-tools-host-session host) "f")))
+      (a2ui-set surface "/flags" [t t]))
+    (a2ui-hosts-test--call host "save_a2ui" "{\"surfaceId\":\"f\",\"name\":\"form\"}")
+    (let ((fresh (a2ui-hosts-test--host)))
+      ;; One call recalls the UI and fills it in; keys not named keep their saved values.
+      (should (equal (a2ui-hosts-test--call fresh "recall_a2ui"
+                                            "{\"name\":\"form\",\"data\":{\"name\":\"Grace\",\"flags\":[false]}}")
+                     "{\"status\":\"shown\",\"surfaceId\":\"f\"}"))
+      (let ((surface (a2ui-session-surface (a2ui-tools-host-session fresh) "f")))
+        (should (equal (a2ui-get surface "/name") "Grace"))
+        (should (equal (a2ui-get surface "/flags") [:false])))
+      ;; The file keeps what was saved.
+      (let ((again (a2ui-hosts-test--host)))
+        (a2ui-hosts-test--call again "recall_a2ui" "{\"name\":\"form\"}")
+        (should (equal (a2ui-get (a2ui-session-surface (a2ui-tools-host-session again) "f") "/name") "Ada")))
+      (should (string-match-p "data must be an object"
+                              (a2ui-hosts-test--call fresh "recall_a2ui" "{\"name\":\"form\",\"data\":[1]}"))))))
+
 (provide 'a2ui-library-test)
 ;;; a2ui-library-test.el ends here

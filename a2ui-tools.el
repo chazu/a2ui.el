@@ -55,7 +55,7 @@
 (defcustom a2ui-tools-catalog-in-description nil
   "When non-nil, put the catalog digest in render_a2ui's description.
 The model then never needs to call a2ui_catalog, at the cost of the
-digest (~900 tokens) in every request, UI or not."
+digest (~1,200 tokens) in every request, UI or not."
   :type 'boolean
   :group 'a2ui)
 
@@ -76,6 +76,38 @@ A renderer adds itself here, e.g. `a2ui-vui-attach'.")
   (queue nil)                           ; undelivered action texts, oldest first
   (waiters nil)                         ; (SURFACE-ID CALLBACK LIVE-P) of awaits
   (failed nil))                         ; (SURFACE-ID . ERRORS) of rejected renders
+
+;;;; Waiting for the user
+
+(defvar a2ui-waiting-functions nil
+  "Abnormal hook run when an agent starts waiting for the user.
+Each function is called with the agent's session and the surface id
+its a2ui_await_action waits on, or nil when it waits on any surface.")
+
+(defvar a2ui-waiting-change-hook nil
+  "Normal hook run when an agent starts or stops waiting for the user.")
+
+(defvar a2ui-tools--waiting nil
+  "Hosts with an a2ui_await_action waiting, the newest first.")
+
+(defun a2ui-tools--set-waiters (host waiters)
+  "Set HOST's WAITERS, keeping track of which hosts wait."
+  (let ((before (a2ui-tools-host-waiters host)))
+    (setf (a2ui-tools-host-waiters host) waiters)
+    (setq a2ui-tools--waiting (delq host a2ui-tools--waiting))
+    (when waiters (push host a2ui-tools--waiting))
+    (unless (equal before waiters)
+      (run-hooks 'a2ui-waiting-change-hook))))
+
+(defun a2ui-waiting ()
+  "Return (SESSION . SURFACE-ID) for each agent waiting on the user.
+The newest wait comes first.  SURFACE-ID is nil for a wait on any
+surface."
+  (cl-loop for host in a2ui-tools--waiting
+           append (cl-loop for (surface-id _ live-p) in (a2ui-tools-host-waiters host)
+                           ;; A client that gave up is no longer waiting.
+                           when (or (null live-p) (funcall live-p))
+                           collect (cons (a2ui-tools-host-session host) surface-id))))
 
 (defvar a2ui-tools-caller-live-p nil
   "Function telling whether the caller of the tool now running still waits.
@@ -131,7 +163,7 @@ a2ui_await_action is waiting for it."
   "End HOST's a2ui_await_action calls on SURFACE-ID, which was deleted."
   (dolist (waiter (a2ui-tools-host-waiters host))
     (when (equal (car waiter) surface-id)
-      (setf (a2ui-tools-host-waiters host) (delq waiter (a2ui-tools-host-waiters host)))
+      (a2ui-tools--set-waiters host (delq waiter (a2ui-tools-host-waiters host)))
       (funcall (nth 1 waiter) (a2ui-tools--result "closed" "surfaceId" surface-id
                                                 "note" "The user closed this surface.")))))
 
@@ -140,12 +172,12 @@ a2ui_await_action is waiting for it."
 A waiting a2ui_await_action for that surface (or any surface) gets it
 first, then the host's DELIVER function; otherwise it is queued.
 Waiters whose caller has gone are dropped."
-  (setf (a2ui-tools-host-waiters host)
-        (seq-filter (pcase-lambda (`(,_ ,_ ,live-p)) (or (null live-p) (funcall live-p)))
+  (a2ui-tools--set-waiters
+   host (seq-filter (pcase-lambda (`(,_ ,_ ,live-p)) (or (null live-p) (funcall live-p)))
                     (a2ui-tools-host-waiters host)))
   (if-let* ((waiter (seq-find (lambda (w) (or (null (car w)) (equal (car w) surface-id)))
                               (a2ui-tools-host-waiters host))))
-      (progn (setf (a2ui-tools-host-waiters host) (delq waiter (a2ui-tools-host-waiters host)))
+      (progn (a2ui-tools--set-waiters host (delq waiter (a2ui-tools-host-waiters host)))
              (funcall (nth 1 waiter) text))
     (if (a2ui-tools-host-deliver host)
         (funcall (a2ui-tools-host-deliver host) text)
@@ -221,10 +253,12 @@ NAMES, a list of tool names, limits the result."
                 :description "List saved UI names and descriptions in the repository library. Use this when the user asks to recall a UI."
                 :parameters (a2ui-tools--schema nil nil))
           (list :name "recall_a2ui"
-                :description "Show a saved UI by name, restoring its saved field values. Buttons now send actions to this conversation. Optionally choose a surfaceId; otherwise replaces the stored surface id."
+                :description "Show a saved UI by name, restoring its saved field values. Buttons now send actions to this conversation. Optionally choose a surfaceId; otherwise replaces the stored surface id. data replaces the saved values of the top-level keys it names, so you can recall and fill in a UI in one call."
                 :parameters (a2ui-tools--schema
                              (list :name (a2ui-obj "type" "string")
-                                   :surfaceId (a2ui-obj "type" "string"))
+                                   :surfaceId (a2ui-obj "type" "string")
+                                   :data (a2ui-obj "type" "object"
+                                                   "description" "Top-level data keys to replace, e.g. {\"commits\": [...]}."))
                              '("name"))))))
     (if names
         (seq-filter (lambda (s) (member (plist-get s :name) names)) specs)
@@ -387,11 +421,12 @@ at once instead of waiting for a press that cannot come."
                            a2ui-tools-caller-live-p))
              (timeout (min 600 (or (a2ui-number (gethash "timeoutSeconds" args))
                                    a2ui-tools-await-timeout))))
-        (push waiter (a2ui-tools-host-waiters host))
+        (a2ui-tools--set-waiters host (cons waiter (a2ui-tools-host-waiters host)))
+        (run-hook-with-args 'a2ui-waiting-functions (a2ui-tools-host-session host) surface-id)
         (run-at-time timeout nil
                      (lambda ()
                        (unless done
-                         (setf (a2ui-tools-host-waiters host) (delq waiter (a2ui-tools-host-waiters host)))
+                         (a2ui-tools--set-waiters host (delq waiter (a2ui-tools-host-waiters host)))
                          (funcall (nth 1 waiter)
                                   (a2ui-tools--result "waiting" "note" "No action yet; the user may still be filling in the surface."))))))))))
 
@@ -417,7 +452,8 @@ CALLBACK before returning."
          (funcall callback (a2ui-tools--result "ok" "uis" (a2ui-library-list (a2ui-tools-host-session host)))))
         ("recall_a2ui"
          (let ((id (a2ui-library-recall (a2ui-tools-host-session host)
-                                       (gethash "name" args) (gethash "surfaceId" args))))
+                                       (gethash "name" args) (gethash "surfaceId" args)
+                                       (gethash "data" args))))
            (funcall callback (a2ui-tools--outcome host nil id))))
         (_ (funcall callback (a2ui-tools--result "error" "error" (format "Unknown tool %s" name)))))
     (error (funcall callback (a2ui-tools--result "error" "error" (error-message-string err))))))

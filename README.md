@@ -16,12 +16,20 @@ Let AI agents draw native, interactive UI in Emacs: forms, tables, diffs and pic
 ## Features
 
 - **The A2UI v0.9 basic catalog**: Text with Markdown, Column, Row, List, Card, Divider, Icon, Button, TextField (including multi-line, edited in its own buffer), CheckBox, ChoicePicker, Slider, DateTimeInput (using `org-read-date`), Tabs and Modal (its content opens in a popup window). Images show inline in graphical frames, after asking before anything is fetched; Video and AudioPlayer appear as links.
-- **An Emacs catalog**: the basic components plus Section (folds), Table (row selection and row actions), Diff (fontified by `diff-mode`, with Accept/Reject), Code (fontified by the language's major mode), Picker (`completing-read`), FileRef and OrgText.
+- **An Emacs catalog**: the basic components plus:
+  - Section (folds)
+  - Table (row selection, row actions, coloured cells, and numbers drawn as bars or sparklines)
+  - Diff (fontified by `diff-mode`, with Accept/Reject; you can pick hunks, or edit the change in Ediff)
+  - Code (fontified by the language's major mode)
+  - Picker (`completing-read`), FileRef and OrgText
+  - Progress and Sparkline
+- **Status colours and conditional parts**: Text, Progress, Sparkline and Table cells take a `tone` (`success`, `warning`, `error` or `muted`) drawn with your theme's faces. Any component takes `visible`, bound to data, so an agent can show or hide parts of a surface without resending it.
 - **Live binding**: inputs write to the data model as you type, and checks run as you go. A field's errors show once you've touched it, or after a blocked submit.
 - **Works with the agents you already use**: gptel (native tools), agent-shell (Claude Code, Codex and other ACP agents), Claude Code or Codex in a terminal (through an MCP server inside Emacs), and any [AG-UI](https://docs.ag-ui.com) agent. See [Connecting an agent](#connecting-an-agent).
 - **Feedback for the model**: invalid surfaces come back to it as compact errors so it can fix them. AG-UI interrupts become Approve/Reject surfaces.
-- **Token-efficient prompting**: models get a compact catalog digest of about 950 tokens, only when they ask for it, instead of a 5,000-token JSON Schema. `update_a2ui` changes part of a surface without resending it.
-- **Saved UIs**: agents can save named surfaces in a repository folder, list them, and recall them in a later conversation with their field values intact.
+- **Token-efficient prompting**: models get a compact catalog digest of about 1,200 tokens, only when they ask for it, instead of a 5,000-token JSON Schema. `update_a2ui` changes part of a surface without resending it.
+- **Saved UIs**: agents can save named surfaces in a repository folder, list them, and recall them in a later conversation with their field values intact, or with new values filled in.
+- **Knowing when an agent waits**: while an agent waits for your button press, the mode line says so, and you're told if its surface is off screen. `M-x a2ui-goto-waiting` takes you there.
 - **No agent required**: `a2ui-replay-file` renders a file of A2UI messages.
 
 ## Requirements
@@ -96,7 +104,7 @@ gptel, MCP clients, and agent-shell get the same seven tools:
 | `a2ui_await_action` | Wait for the user's next button press |
 | `save_a2ui` | Save a live surface and its current data under a name |
 | `list_a2ui` | List saved UI names and descriptions |
-| `recall_a2ui` | Restore a saved UI into this conversation |
+| `recall_a2ui` | Restore a saved UI into this conversation, optionally replacing some of its data |
 
 Surfaces open in their own buffers, or inside the gptel chat or agent-shell buffer (see [Where surfaces appear](#where-surfaces-appear)). A button press reaches the model in one of two ways:
 - as the result of a pending `a2ui_await_action`, when the model is waiting;
@@ -122,7 +130,8 @@ a letter or digit. For example:
 
 Pass that object to `save_a2ui`. To recall it, pass `{"name":"deploy"}` to
 `recall_a2ui`; optionally add `"surfaceId":"another-form"` to open a separate
-copy. Saving an existing name requires `"overwrite":true`.
+copy, and `"data":{...}` to replace the saved values of the top-level keys it
+names, so one call can recall a form and fill it in. Saving an existing name requires `"overwrite":true`.
 
 The JSON stores the components, catalog, theme, and **current field values**.
 Review those values before committing saved UIs to Git. It does not store
@@ -155,7 +164,7 @@ its existing render tool.
 
 Ask for UI in any gptel chat buffer, e.g. *"Show me a form to collect the deploy target and replica count."* When you press a button, the press is typed into the chat as `User performed action "…" … Context: {…}` and sent, so the model answers in the conversation. Set `a2ui-gptel-send-actions` to nil to have the model wait in `a2ui_await_action` instead. Each chat buffer has its own surfaces.
 
-You can turn the tools on or off per buffer from gptel's tool menu (category `a2ui`). Small local models often skip `a2ui_catalog` and guess component shapes. Setting `a2ui-tools-catalog-in-description` to t puts the digest in the tool description, at about 950 tokens per request.
+You can turn the tools on or off per buffer from gptel's tool menu (category `a2ui`). Small local models often skip `a2ui_catalog` and guess component shapes. Setting `a2ui-tools-catalog-in-description` to t puts the digest in the tool description, at about 1,200 tokens per request.
 
 Use a model that calls tools reliably. These were checked live with `examples/agents/drive-gptel.el`, through OpenRouter:
 - Claude Haiku 5.5 got it right on the first try, both waiting in `a2ui_await_action` and taking the press as a chat message.
@@ -296,6 +305,7 @@ An inline surface is as live as one in its own buffer: fields, buttons and data 
 | `a2ui-agui-send` | Send a message to the current agent; surfaces appear as it answers |
 | `a2ui-agui-abort` | Stop the running request |
 | `a2ui-list-surfaces` | Every live surface; `RET` shows one, `d` deletes it |
+| `a2ui-goto-waiting` | Go to the surface an agent is waiting on; clicking the mode line's "a2ui: waiting" does the same |
 | `a2ui-replay-file` | Feed a `.jsonl` file of A2UI messages into a local session |
 | `a2ui-show-log` | Every A2UI message in and out, as pretty JSON |
 | `a2ui-agui-show-log` | Raw AG-UI traffic, one event per line |
@@ -321,6 +331,8 @@ In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels. A Modal's pop
 | `a2ui-tools-catalog-in-description` | `nil` | Put the catalog digest in `render_a2ui`'s description instead of on demand |
 | `a2ui-library-directory` | `".a2ui"` | Saved UI folder, relative to the session's project root; an absolute path selects a shared library |
 | `a2ui-tools-await-timeout` | `120` | Seconds `a2ui_await_action` waits by default |
+| `a2ui-waiting-indicator` | `t` | Show "a2ui: waiting" in the mode line while an agent waits for you |
+| `a2ui-waiting-notify` | `echo` | When an agent starts waiting on a surface you can't see: `echo` a message, send a `desktop` notification, or `nil` |
 | `a2ui-gptel-send-actions` | `t` | Send button presses to the gptel chat as messages |
 | `a2ui-gptel-inline-surfaces` | `nil` | Draw surfaces in the gptel chat buffer |
 | `a2ui-agent-shell-inline-surfaces` | `nil` | Draw surfaces in the agent-shell buffer |
@@ -344,6 +356,7 @@ In a long-text edit buffer, `C-c C-c` saves and `C-c C-k` cancels. A Modal's pop
 | `a2ui-confirm-open-url` | `t` | Ask before opening a URL; only http(s) is ever opened |
 | `a2ui-time-zone` | `nil` | Zone for `formatDate`; `nil` means local time |
 | `a2ui-emacs-language-modes` | (alist) | Major modes for Code components |
+| `a2ui-emacs-bar-width`, `a2ui-emacs-table-bar-width` | `20`, `8` | Width of Progress bars, and of bars in Table cells |
 | `a2ui-log-messages`, `a2ui-agui-log-events` | `t` | Whether to keep the logs |
 
 ## For package authors
@@ -367,6 +380,8 @@ New components and functions are registered per catalog:
 (a2ui-define-component emacs "Magit" (c surface scope) ...)
 (a2ui-define-function emacs "projectRoot" () (project-root (project-current)))
 ```
+
+To act when an agent starts waiting for the user (an `alert`, a sound, a tab-bar badge), add a function to `a2ui-waiting-functions`; it is called with the agent's session and the surface id it waits on. `a2ui-waiting-change-hook` runs whenever a wait starts or ends, and `(a2ui-waiting)` lists the current waits.
 
 The files:
 

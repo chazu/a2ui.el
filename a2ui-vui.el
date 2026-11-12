@@ -127,6 +127,24 @@ agent."
 (defface a2ui-placeholder '((t :inherit shadow :slant italic))
   "Face for components that have not arrived or cannot be shown." :group 'a2ui)
 
+(defface a2ui-tone-success '((t :inherit success))
+  "Face for text and gauges an agent marks as a success." :group 'a2ui)
+
+(defface a2ui-tone-warning '((t :inherit warning))
+  "Face for text and gauges an agent marks as a warning." :group 'a2ui)
+
+(defface a2ui-tone-error '((t :inherit error))
+  "Face for text and gauges an agent marks as an error." :group 'a2ui)
+
+(defface a2ui-tone-muted '((t :inherit shadow))
+  "Face for text and gauges an agent marks as muted." :group 'a2ui)
+
+(defun a2ui-vui-tone-face (tone)
+  "Return the face for TONE, a string from an agent, or nil."
+  (pcase tone
+    ("success" 'a2ui-tone-success) ("warning" 'a2ui-tone-warning)
+    ("error" 'a2ui-tone-error) ("muted" 'a2ui-tone-muted)))
+
 ;;;; Component registry
 
 (defvar a2ui-vui--renderers (make-hash-table :test 'eq)
@@ -173,7 +191,8 @@ A catalog that extends another falls back to its renderers."
 (defun a2ui-vui-render (surface id &optional scope)
   "Return the vnode for component ID of SURFACE rendered in SCOPE.
 A component that has not arrived yet renders as a placeholder, as
-does one whose type has no renderer."
+does one whose type has no renderer.  One whose `visible' is false
+renders as nil."
   (let ((c (and (stringp id) (a2ui-surface-component surface id))))
     (cond
      ((null c) (a2ui-vui--placeholder "…"))
@@ -181,6 +200,9 @@ does one whose type has no renderer."
       (a2ui-report-validation-error surface (format "/components/%s" id)
                                     (format "Component %s contains itself" id))
       (a2ui-vui--placeholder (format "[cycle: %s]" id)))
+     ((and (not (eq (gethash "visible" c 'absent) 'absent))
+           (not (a2ui-true-p (a2ui-resolve-prop c "visible" surface scope))))
+      nil)
      (t
       (let ((type (gethash "component" c))
             (a2ui-vui--rendering (cons (cons id scope) a2ui-vui--rendering)))
@@ -214,12 +236,14 @@ PROP defaults to `children'.
 A static array renders each id in order; a template renders its
 component once per item of the bound list, each in the item's scope."
   (let ((children (gethash (or prop "children") component)))
-    (cond ((vectorp children)
-           (mapcar (lambda (id) (a2ui-vui-render surface id scope)) children))
-          ((hash-table-p children)
-           (let ((tid (gethash "componentId" children)))
-             (mapcar (lambda (item) (a2ui-vui-render surface tid item))
-                     (a2ui-vui--template-scopes surface children scope)))))))
+    ;; Hidden children render as nil and take no space.
+    (delq nil
+          (cond ((vectorp children)
+                 (mapcar (lambda (id) (a2ui-vui-render surface id scope)) children))
+                ((hash-table-p children)
+                 (let ((tid (gethash "componentId" children)))
+                   (mapcar (lambda (item) (a2ui-vui-render surface tid item))
+                           (a2ui-vui--template-scopes surface children scope))))))))
 
 (defun a2ui-vui-child-ids (component surface scope)
   "Return (ID . SCOPE) for each child COMPONENT renders on SURFACE in SCOPE."
@@ -500,8 +524,10 @@ non-nil, applies to every line."
     (if (cdr lines) (apply #'vui-vstack lines) (car lines))))
 
 (a2ui-define-component basic "Text" (c surface scope)
-  (a2ui-vui--lines (a2ui-vui-markdown (a2ui-vui--string c "text" surface scope)
-                                      (a2ui-vui--variant-face (gethash "variant" c)))))
+  (let ((variant (a2ui-vui--variant-face (gethash "variant" c)))
+        (tone (a2ui-vui-tone-face (a2ui-resolve-prop c "tone" surface scope))))
+    (a2ui-vui--lines (a2ui-vui-markdown (a2ui-vui--string c "text" surface scope)
+                                        (if (and variant tone) (list tone variant) (or tone variant))))))
 
 (a2ui-define-component basic "Icon" (c surface scope)
   (vui-text (a2ui-vui--icon c surface scope)))

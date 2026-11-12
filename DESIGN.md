@@ -193,11 +193,13 @@ These reuse A2UI's component and binding model; only the types are new. Each one
 | Component | Props | Rendering |
 | --- | --- | --- |
 | Section | `title`, `child`, `collapsed` | magit-section style fold with TAB |
-| Table | `columns`, `rows` (bound list), `selectable` | vtable, with row selection written to a bound path |
-| Diff | `diff` (unified text), `file` | `diff-mode` fontification, read-only; optional Accept / Reject actions |
+| Table | `columns`, `rows` (bound list), `selectable` | vtable, with row selection written to a bound path; a column's `toneKey` colours cells, `display` draws numbers as bars or sparklines |
+| Diff | `diff` (unified text), `file`, `selection`, `edited` | `diff-mode` fontification, read-only; optional Accept / Reject actions; per-hunk toggles; Ediff against the file |
 | Code | `text`, `language` | Fontified with the language's major mode |
 | Picker | `options` (bound list), `value` | Button that opens `completing-read`; writes the choice |
 | FileRef | `path`, `line` | Button that visits the file at the line |
+| Progress | `value`, `min`, `max`, `label`, `text`, `tone` | A bar of block characters and a percentage or the given text |
+| Sparkline | `values` (bound list), `min`, `max`, `label`, `text`, `tone` | One line of `▁▂▃▄▅▆▇█`, a gap for null |
 | OrgText | `text` | Org markup rendered with org faces, read-only |
 
 The catalog is a JSON Schema file (with matching `$id` and `catalogId`) shipped in the package, so agents can be prompted with it, and the core's validator uses it too.
@@ -438,5 +440,12 @@ Completing the design (after host integrations):
   - agent-shell (`a2ui-agent-shell-inline-surfaces`) draws them above the prompt on `turn-complete`, between plain newlines, because the transcript and prompt are read-only. It then moves `comint-last-prompt` past them.
   - Live: Haiku through gptel drew the form in the chat, and the press inside it went back as the next message. Claude through agent-shell drew a review above the prompt, and the Approve press inside the shell came back as the next prompt.
 - **Demo GIF.** `scripts/demo-gif.el` drives the real renderer through `examples/code-review.jsonl` in batch Emacs: a blocked Merge, unfolding Context, picking a reviewer, and the action going out. Each step's text, cursor, echo area and a class for each character's faces are recorded. `scripts/demo-gif.py` draws them as an Emacs window and ImageMagick makes `docs/demo.gif`. It needs no display, so the GIF can be rebuilt whenever the renderer changes. `scripts/example-gifs.el` records the examples the same way, scrolling the rollout's tall surface like a window, into `examples/images/`.
+- **Tones, gauges and visibility.** Building the rollout example meant drawing bars and sparklines as text and adding and removing components to show a card, so these became catalog features.
+  - `tone` (`success`, `warning`, `error`, `muted`) maps to faces inheriting `success`, `warning`, `error` and `shadow`, so it follows the user's theme. Text, Progress and Sparkline take it as a prop; a Table column names the row field holding each cell's tone (`toneKey`).
+  - A Table column's `display` draws a number as a bar (`min`..`max`, 0..1 by default) or an array as a sparkline. The agent sends numbers, not glyphs.
+  - Any component takes `visible`, usually bound. A hidden component renders as nil, and containers drop nil children, so it takes no room. A2UI v0.9 has no such property: `visible` and `tone` are in the Emacs catalog's schema only, and a basic-catalog renderer would ignore them.
+- **Diff hunks and Ediff.** With a `selection` binding, each hunk gets a toggle and the chosen indices are written there, unset meaning all; hunks left out are dimmed. When `file` exists, `[Ediff]` compares it with the selected hunks applied, using a small applier that finds moved lines nearby as `patch` does. Neither buffer is the file, which is never changed. When Ediff quits, an edit to the proposed copy is written to the `edited` binding as a unified diff from `diff -u`, and the Diff shows it. The agent reads both bindings through its Accept action's context, like any other value.
+- **Knowing when an agent waits.** A host's waiters change only through `a2ui-tools--set-waiters`, which keeps a list of waiting hosts and runs `a2ui-waiting-change-hook`; a new wait also runs `a2ui-waiting-functions`. `a2ui.el` uses them for a mode line construct in `global-mode-string` and a message, or a desktop notification, when the surface isn't visible. A wait whose client has gone (MCP) isn't counted. AG-UI interrupts don't go through `a2ui_await_action`, so they don't show as waiting.
+- **Recall with data.** `recall_a2ui` takes `data`, whose top-level keys replace the saved ones, so recalling and filling in a saved UI is one call. The saved file is not changed.
 - **Still open:** MELPA submission, once the repository is public.
 

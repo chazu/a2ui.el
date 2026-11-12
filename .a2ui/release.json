@@ -1,7 +1,7 @@
 {
   "format": "a2ui-library",
   "version": 1,
-  "description": "a2ui.el release checklist.  After recall, fill /version, /bump ([\"patch\"|\"minor\"|\"major\"]), /date (YYYY-MM-DD), /commits ([{sha, subject}] from git log since the last tag), /changelog (a drafted CHANGELOG.md entry) and /intro (one line on what changed); leave /checks/* false until each is verified.  Actions: run_checks (run eldev test and eldev lint, check the Version: header, CHANGELOG.md, README and git status, then set the /checks that pass), show_commit {sha}, release {version, bump, date, changelog} (commit, tag vVERSION and push, after confirming with the user).",
+  "description": "a2ui.el release checklist.  Recall it with data filling version, bump ([\"patch\"|\"minor\"|\"major\"]), date (YYYY-MM-DD), commits ([{sha, subject}] from git log since the last tag), changelog (a drafted CHANGELOG.md entry) and intro (one line on what changed); leave checks false until each is verified.  Actions: run_checks (run eldev test and eldev lint, check the Version: header, CHANGELOG.md, README and git status, then set the /checks that pass), show_commit {sha}, release {version, bump, date, changelog} (commit, tag vVERSION and push, after confirming with the user).",
   "surface": {
     "surfaceId": "release",
     "catalogId": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1",

@@ -23,6 +23,8 @@
     ("diff-header\\|diff-file-header\\|a2ui-emacs-file" . "file")
     ("a2ui-heading\\|org-level\\|a2ui-emacs-section" . "heading")
     ("a2ui-button-primary" . "primary")
+    ("a2ui-tone-success\\|\\`success" . "success")
+    ("a2ui-tone-warning\\|\\`warning" . "warning")
     ;; Before shadow: Org's code faces inherit from it.
     ("org-code\\|org-verbatim" . "code")
     ("a2ui-button-inactive\\|a2ui-placeholder\\|a2ui-caption\\|shadow" . "shadow")
@@ -99,7 +101,8 @@ scrolled there would.  DELAY is how long the frame stays, in 1/100 s."
             :delay delay))))
 
 (defun a2ui-demo-gif--write (name meta frames)
-  "Write FRAMES, oldest first, with META to docs/NAME-frames.json.
+  "Write FRAMES, oldest first, and META for the GIF NAME to docs/.
+The file is docs/NAME-frames.json.
 META is a plist: :title of the window, :cols, :rows, :output (the
 GIF's path) and :still (where to put the last frame as a PNG)."
   (make-directory "docs" t)

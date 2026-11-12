@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1",
   "title": "a2ui.el Emacs catalog",
-  "description": "The A2UI v0.9 basic catalog plus Emacs components: Section, Table, Diff, Code, Picker, FileRef and OrgText.  Prefer them to building the same thing from Rows and Text.",
+  "description": "The A2UI v0.9 basic catalog plus Emacs components: Section, Table, Diff, Code, Picker, FileRef, OrgText, Progress and Sparkline.  Prefer them to building the same thing from Rows and Text.  Any component takes visible?:bool, usually bound to data, to show or hide it without sending components again.",
   "catalogId": "https://github.com/chazu/a2ui.el/catalogs/emacs/v0.1",
   "components": {
     "Text": {
@@ -37,6 +37,10 @@
                 "body"
               ],
               "default": "body"
+            },
+            "tone": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString",
+              "description": "Colours it: success, warning, error or muted.  May be bound to data."
             }
           },
           "required": [
@@ -45,7 +49,8 @@
           ]
         }
       ],
-      "unevaluatedProperties": false
+      "unevaluatedProperties": false,
+      "x-a2ui-digest": "Text: text:str variant?:h1|h2|h3|h4|h5|caption|body tone?:success|warning|error|muted  (tone colours it; may be bound)"
     },
     "Image": {
       "type": "object",
@@ -967,7 +972,7 @@
     "Table": {
       "type": "object",
       "description": "A table of rows from the data model, with optional row selection and a row action.",
-      "x-a2ui-digest": "Table: columns:[{label:str key:string align?:left|right|center}] rows:path|[objects] rowKey?:string selectable?:none|single|multiple selection?:path rowAction?:action  (any list of records: files, items, results; key names a row field; selection gets rowKey values; rowAction runs on RET with paths relative to the row)",
+      "x-a2ui-digest": "Table: columns:[{label:str key:string align?:left|right|center toneKey?:string display?:text|bar|sparkline min?:number max?:number}] rows:path|[objects] rowKey?:string selectable?:none|single|multiple selection?:path rowAction?:action  (any list of records: files, items, results; key names a row field; selection gets rowKey values; rowAction runs on RET with paths relative to the row; toneKey names a row field holding the cell's tone, success|warning|error|muted; display bar draws a number between min (0) and max (1), sparkline an array of numbers)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
@@ -999,6 +1004,28 @@
                       "right",
                       "center"
                     ]
+                  },
+                  "toneKey": {
+                    "type": "string",
+                    "description": "The row field holding this cell's tone: success, warning, error, muted."
+                  },
+                  "display": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "bar",
+                      "sparkline"
+                    ],
+                    "default": "text",
+                    "description": "bar draws a number as a bar; sparkline draws an array of numbers."
+                  },
+                  "min": {
+                    "type": "number",
+                    "description": "The bottom of the scale; bar defaults to 0, sparkline to the cell's least value."
+                  },
+                  "max": {
+                    "type": "number",
+                    "description": "The top of the scale; bar defaults to 1, sparkline to the cell's greatest value."
                   }
                 },
                 "required": [
@@ -1045,7 +1072,7 @@
     "Diff": {
       "type": "object",
       "description": "A unified diff, fontified like diff-mode, with optional Accept and Reject buttons.",
-      "x-a2ui-digest": "Diff: diff:str file?:str acceptAction?:action rejectAction?:action  (a proposed change to one file, as unified diff text)",
+      "x-a2ui-digest": "Diff: diff:str file?:str acceptAction?:action rejectAction?:action selection?:path edited?:path  (a proposed change to one file, as unified diff text; with selection the user ticks hunks and their indices from 0 are written there, unset meaning all; when file exists the user may open it in Ediff, and with edited their edited result is written there as a unified diff; put both paths in acceptAction's context)",
       "allOf": [
         {
           "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
@@ -1065,18 +1092,121 @@
             },
             "file": {
               "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString",
-              "description": "The file the diff applies to, shown as a heading."
+              "description": "The file the diff applies to, shown as a heading.  When it exists, relative to the project, the user can open the change in Ediff."
             },
             "acceptAction": {
               "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action"
             },
             "rejectAction": {
               "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/Action"
+            },
+            "selection": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DataBinding",
+              "description": "Lets the user pick hunks; their indices from 0 are written here.  Unset or null means every hunk."
+            },
+            "edited": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DataBinding",
+              "description": "Where the user's edit in Ediff is written, as a unified diff against the file."
             }
           },
           "required": [
             "component",
             "diff"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Progress": {
+      "type": "object",
+      "description": "A bar showing how far a value has got between min and max, with a label and text after it.",
+      "x-a2ui-digest": "Progress: value:num max?:num min?:num label?:str text?:str tone?:success|warning|error|muted  (a bar from min (0) to max (1); text replaces the percentage shown after it)",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "const": "Progress"
+            },
+            "value": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber"
+            },
+            "min": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber",
+              "description": "The empty end; 0 by default."
+            },
+            "max": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber",
+              "description": "The full end; 1 by default."
+            },
+            "label": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"
+            },
+            "text": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString",
+              "description": "Shown after the bar instead of the percentage, e.g. \"3/6 pods\"."
+            },
+            "tone": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString",
+              "description": "Colours it: success, warning, error or muted.  May be bound to data."
+            }
+          },
+          "required": [
+            "component",
+            "value"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Sparkline": {
+      "type": "object",
+      "description": "A one-line chart of a series of numbers, oldest first.",
+      "x-a2ui-digest": "Sparkline: values:path|[numbers] min?:num max?:num label?:str text?:str tone?:success|warning|error|muted  (a trend, oldest first; null is a gap; scaled to min and max, by default the values' own range)",
+      "allOf": [
+        {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/ComponentCommon"
+        },
+        {
+          "$ref": "#/$defs/CatalogComponentCommon"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "const": "Sparkline"
+            },
+            "values": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicValue",
+              "description": "An array of numbers, oldest first; null leaves a gap."
+            },
+            "min": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber"
+            },
+            "max": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicNumber"
+            },
+            "label": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString"
+            },
+            "text": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString",
+              "description": "Shown after the chart, e.g. the latest value."
+            },
+            "tone": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicString",
+              "description": "Colours it: success, warning, error or muted.  May be bound to data."
+            }
+          },
+          "required": [
+            "component",
+            "values"
           ]
         }
       ],
@@ -1750,6 +1880,10 @@
         "weight": {
           "type": "number",
           "description": "The relative weight of this component within a Row or Column. This is similar to the CSS 'flex-grow' property. Note: this may ONLY be set when the component is a direct descendant of a Row or Column."
+        },
+        "visible": {
+          "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicBoolean",
+          "description": "Whether the component is shown; false hides it and its children.  Defaults to true."
         }
       }
     },
@@ -1837,6 +1971,12 @@
         },
         {
           "$ref": "#/components/Diff"
+        },
+        {
+          "$ref": "#/components/Progress"
+        },
+        {
+          "$ref": "#/components/Sparkline"
         },
         {
           "$ref": "#/components/Code"

@@ -36,6 +36,7 @@ COLOURS = {
     "added": ("#a6e3a1", False), "removed": ("#f38ba8", False), "hunk": ("#cba6f7", False),
     "file": ("#f9e2af", True), "keyword": ("#cba6f7", False), "string": ("#a6e3a1", False),
     "comment": ("#6c7086", False), "function": ("#89b4fa", False),
+    "success": ("#a6e3a1", False), "warning": ("#f9e2af", False),
 }
 
 

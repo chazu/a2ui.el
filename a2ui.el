@@ -234,6 +234,93 @@ METADATA is shown after outbound messages that carry it."
     (tabulated-list-print)
     (pop-to-buffer (current-buffer))))
 
+;;;; Waiting agents
+
+(defcustom a2ui-waiting-indicator t
+  "When non-nil, the mode line shows when an agent is waiting for you.
+An agent waits in a2ui_await_action until you press a button.
+Clicking the indicator runs `a2ui-goto-waiting'."
+  :type 'boolean
+  :group 'a2ui)
+
+(defcustom a2ui-waiting-notify 'echo
+  "How to tell you an agent has started waiting on a surface you can't see.
+nil says nothing, `echo' shows a message, and `desktop' sends a
+desktop notification where `notifications-notify' works (a message
+otherwise).  Nothing is said when the surface is already on screen.
+`a2ui-waiting-functions' can do more."
+  :type '(choice (const :tag "Nothing" nil)
+                 (const :tag "Message" echo)
+                 (const :tag "Desktop notification" desktop))
+  :group 'a2ui)
+
+(defface a2ui-waiting '((t :inherit warning :weight bold))
+  "Face for the mode line's waiting indicator." :group 'a2ui)
+
+(defun a2ui--waiting-surface (session surface-id)
+  "Return the surface id a wait on SURFACE-ID of SESSION is about, or nil.
+A wait on any surface is about the session's newest one."
+  (or surface-id (car (last (a2ui-session-surface-ids session)))))
+
+(defun a2ui--waiting-mode-line ()
+  "Return the mode line's waiting indicator, or \"\" when no agent waits."
+  (let ((waits (and a2ui-waiting-indicator (a2ui-waiting))))
+    (if (null waits)
+        ""
+      (propertize (if (cdr waits) (format " a2ui: %d waiting " (length waits)) " a2ui: waiting ")
+                  'face 'a2ui-waiting
+                  'help-echo (format "%s is waiting for you; mouse-1: go there"
+                                     (a2ui-session-name (car (car waits))))
+                  'mouse-face 'mode-line-highlight
+                  'local-map (make-mode-line-mouse-map 'mouse-1 #'a2ui-goto-waiting)))))
+
+(defvar a2ui--waiting-mode-line-construct '(:eval (a2ui--waiting-mode-line))
+  "The mode line construct showing whether an agent waits.")
+(put 'a2ui--waiting-mode-line-construct 'risky-local-variable t)
+
+(defun a2ui--waiting-changed ()
+  "Show or update the waiting indicator."
+  (when (and a2ui-waiting-indicator
+             (not (memq 'a2ui--waiting-mode-line-construct global-mode-string)))
+    (setq global-mode-string
+          (append (or global-mode-string '("")) '(a2ui--waiting-mode-line-construct))))
+  (force-mode-line-update t))
+
+(defun a2ui--waiting-notify (session surface-id)
+  "Tell the user SESSION's agent waits on SURFACE-ID, if it's off screen."
+  (let* ((id (a2ui--waiting-surface session surface-id))
+         (buffer (and id (car (a2ui-vui--view session id)))))
+    (when (and a2ui-waiting-notify
+               (not (and (buffer-live-p buffer) (get-buffer-window buffer 'visible))))
+      (let ((text (format "%s is waiting for you%s" (a2ui-session-name session)
+                          (if id (format " on %s" id) ""))))
+        (if (and (eq a2ui-waiting-notify 'desktop) (fboundp 'notifications-notify))
+            (condition-case nil
+                (notifications-notify :title "a2ui" :body text)
+              (error (message "a2ui: %s (M-x a2ui-goto-waiting)" text)))
+          (message "a2ui: %s (M-x a2ui-goto-waiting)" text))))))
+
+(declare-function notifications-notify "notifications" (&rest params))
+
+(add-hook 'a2ui-waiting-change-hook #'a2ui--waiting-changed)
+(add-hook 'a2ui-waiting-functions #'a2ui--waiting-notify)
+
+;;;###autoload
+(defun a2ui-goto-waiting ()
+  "Show and select the surface an agent is waiting on, the newest first."
+  (interactive)
+  (pcase-let* ((`(,session . ,surface-id) (car (a2ui-waiting)))
+               (id (and session (a2ui--waiting-surface session surface-id))))
+    (cond
+     ((null session) (message "a2ui: no agent is waiting for you"))
+     ((null id) (message "a2ui: %s is waiting, but has shown no surface" (a2ui-session-name session)))
+     (t (let* ((buffer (car (a2ui-vui--view session id)))
+               (window (if (buffer-live-p buffer)
+                           (or (get-buffer-window buffer 'visible)
+                               (display-buffer buffer a2ui-vui-display-action))
+                         (get-buffer-window (a2ui-show-surface session id) 'visible))))
+          (when window (select-window window)))))))
+
 ;;;; Replay
 
 (defvar a2ui-replay-session nil
