@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-11)
 
 - Status colours: Text, the new Progress and Sparkline components, and Table cells (through a column's `toneKey`) take a `tone` of `success`, `warning`, `error` or `muted`, drawn with faces that follow your theme.
 - Gauges: Progress draws a bar with a label and a percentage or text; Sparkline draws a series on one line. A Table column with `display` `bar` or `sparkline` draws numbers the same way.
